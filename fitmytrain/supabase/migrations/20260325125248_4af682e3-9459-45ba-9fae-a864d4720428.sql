@@ -1,0 +1,1 @@
+ALTER TABLE public.weight_logs ADD COLUMN is_confirmed boolean NOT NULL DEFAULT false;
