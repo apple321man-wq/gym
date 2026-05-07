@@ -17,16 +17,97 @@ export type TrainingIntensity =
   | 'hard' 
   | 'rest';
 
-export type MuscleGroup = 
-  | 'chest' 
-  | 'back' 
-  | 'quadriceps' 
-  | 'hamstrings' 
+export type MuscleGroup =
+  | 'chest'
+  | 'back'
+  | 'lats'
+  | 'upper_back'
+  | 'lower_back'
+  | 'traps'
+  | 'lumbar'
+  | 'lumbar_multifidus'
+  | 'lumbar_stabilizers'
+  | 'quadriceps'
+  | 'quads'
+  | 'hamstrings'
   | 'glutes'
-  | 'shoulders' 
+  | 'calves'
+  | 'hip_abductors'
+  | 'hip_flexors'
+  | 'shoulders'
+  | 'front_delt'
+  | 'side_delt'
+  | 'rear_delt'
+  | 'rotator_cuff'
+  | 'shoulder_stabilizers'
   | 'biceps'
+  | 'brachialis'
+  | 'brachioradialis'
   | 'triceps'
-  | 'core';
+  | 'triceps_long'
+  | 'forearms'
+  | 'grip'
+  | 'core'
+  | 'abs_rectus'
+  | 'rectus_abdominis'
+  | 'lower_rectus_abdominis'
+  | 'abs_obliques'
+  | 'obliques';
+
+export const MUSCLE_GROUPS: MuscleGroup[] = [
+  'chest',
+  'back', 'lats', 'upper_back', 'lower_back', 'traps', 'lumbar', 'lumbar_multifidus', 'lumbar_stabilizers',
+  'quadriceps', 'quads', 'hamstrings', 'glutes', 'calves', 'hip_abductors', 'hip_flexors',
+  'shoulders', 'front_delt', 'side_delt', 'rear_delt', 'rotator_cuff', 'shoulder_stabilizers',
+  'biceps', 'brachialis', 'brachioradialis', 'triceps', 'triceps_long', 'forearms', 'grip',
+  'core', 'abs_rectus', 'rectus_abdominis', 'lower_rectus_abdominis', 'abs_obliques', 'obliques',
+];
+
+export const PRIORITY_MUSCLE_GROUPS: MuscleGroup[] = [
+  'chest', 'lats', 'upper_back', 'lower_back',
+  'quadriceps', 'hamstrings', 'glutes', 'calves',
+  'front_delt', 'side_delt', 'rear_delt',
+  'biceps', 'triceps', 'forearms',
+  'abs_rectus', 'abs_obliques', 'core',
+];
+
+export const MUSCLE_GROUP_PARENT: Record<MuscleGroup, MuscleGroup> = {
+  chest: 'chest',
+  back: 'back',
+  lats: 'back',
+  upper_back: 'back',
+  lower_back: 'back',
+  traps: 'back',
+  lumbar: 'lower_back',
+  lumbar_multifidus: 'lower_back',
+  lumbar_stabilizers: 'lower_back',
+  quadriceps: 'quadriceps',
+  quads: 'quadriceps',
+  hamstrings: 'hamstrings',
+  glutes: 'glutes',
+  calves: 'quadriceps',
+  hip_abductors: 'glutes',
+  hip_flexors: 'core',
+  shoulders: 'shoulders',
+  front_delt: 'shoulders',
+  side_delt: 'shoulders',
+  rear_delt: 'shoulders',
+  rotator_cuff: 'shoulders',
+  shoulder_stabilizers: 'shoulders',
+  biceps: 'biceps',
+  brachialis: 'biceps',
+  brachioradialis: 'biceps',
+  triceps: 'triceps',
+  triceps_long: 'triceps',
+  forearms: 'biceps',
+  grip: 'biceps',
+  core: 'core',
+  abs_rectus: 'core',
+  rectus_abdominis: 'core',
+  lower_rectus_abdominis: 'core',
+  abs_obliques: 'core',
+  obliques: 'core',
+};
 
 export type ExerciseType = 'compound' | 'isolation';
 
@@ -224,13 +305,39 @@ export const LOAD_COEFFICIENTS: Record<LoadType, number> = {
 export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
   chest: 'Грудь',
   back: 'Спина',
+  lats: 'Широчайшие',
+  upper_back: 'Верх спины',
+  lower_back: 'Поясница',
+  traps: 'Трапеции',
+  lumbar: 'Поясничные',
+  lumbar_multifidus: 'Многораздельные мышцы',
+  lumbar_stabilizers: 'Стабилизаторы поясницы',
   quadriceps: 'Квадрицепс',
-  hamstrings: 'Задняя поверхность',
+  quads: 'Квадрицепс',
+  hamstrings: 'Бицепс бедра',
   glutes: 'Ягодицы',
+  calves: 'Икры',
+  hip_abductors: 'Отводящие бедра',
+  hip_flexors: 'Сгибатели бедра',
   shoulders: 'Плечи',
+  front_delt: 'Передняя дельта',
+  side_delt: 'Средняя дельта',
+  rear_delt: 'Задняя дельта',
+  rotator_cuff: 'Ротаторная манжета',
+  shoulder_stabilizers: 'Стабилизаторы плеча',
   biceps: 'Бицепс',
+  brachialis: 'Брахиалис',
+  brachioradialis: 'Плечелучевая',
   triceps: 'Трицепс',
+  triceps_long: 'Длинная головка трицепса',
+  forearms: 'Предплечья',
+  grip: 'Хват',
   core: 'Кор',
+  abs_rectus: 'Прямая мышца живота',
+  rectus_abdominis: 'Прямая мышца живота',
+  lower_rectus_abdominis: 'Нижний пресс',
+  abs_obliques: 'Косые мышцы живота',
+  obliques: 'Косые мышцы живота',
 };
 
 export const GOAL_LABELS: Record<TrainingGoal, string> = {
@@ -263,27 +370,48 @@ export const INTENSITY_PERCENT: Record<Exclude<TrainingIntensity, 'rest'>, { min
 export const RECOMMENDED_VOLUME_WEEKLY: Record<MuscleGroup, { min: number; max: number }> = {
   chest: { min: 12, max: 18 },
   back: { min: 14, max: 20 },
+  lats: { min: 8, max: 14 },
+  upper_back: { min: 8, max: 14 },
+  lower_back: { min: 4, max: 10 },
+  traps: { min: 4, max: 10 },
+  lumbar: { min: 3, max: 8 },
+  lumbar_multifidus: { min: 2, max: 6 },
+  lumbar_stabilizers: { min: 2, max: 6 },
   quadriceps: { min: 12, max: 18 },
+  quads: { min: 12, max: 18 },
   hamstrings: { min: 10, max: 16 },
   glutes: { min: 10, max: 16 },
+  calves: { min: 6, max: 14 },
+  hip_abductors: { min: 4, max: 10 },
+  hip_flexors: { min: 3, max: 8 },
   shoulders: { min: 12, max: 18 },
+  front_delt: { min: 6, max: 12 },
+  side_delt: { min: 8, max: 16 },
+  rear_delt: { min: 8, max: 16 },
+  rotator_cuff: { min: 3, max: 8 },
+  shoulder_stabilizers: { min: 3, max: 8 },
   biceps: { min: 8, max: 14 },
+  brachialis: { min: 4, max: 10 },
+  brachioradialis: { min: 4, max: 10 },
   triceps: { min: 8, max: 14 },
+  triceps_long: { min: 4, max: 10 },
+  forearms: { min: 4, max: 12 },
+  grip: { min: 3, max: 8 },
   core: { min: 6, max: 12 },
+  abs_rectus: { min: 6, max: 12 },
+  rectus_abdominis: { min: 6, max: 12 },
+  lower_rectus_abdominis: { min: 4, max: 10 },
+  abs_obliques: { min: 4, max: 10 },
+  obliques: { min: 4, max: 10 },
 };
 
 // Monthly recommended volume per muscle group (4 weeks)
-export const RECOMMENDED_VOLUME_MONTHLY: Record<MuscleGroup, { min: number; max: number }> = {
-  chest: { min: 48, max: 72 },
-  back: { min: 56, max: 80 },
-  quadriceps: { min: 48, max: 72 },
-  hamstrings: { min: 40, max: 64 },
-  glutes: { min: 40, max: 64 },
-  shoulders: { min: 48, max: 72 },
-  biceps: { min: 32, max: 56 },
-  triceps: { min: 32, max: 56 },
-  core: { min: 24, max: 48 },
-};
+export const RECOMMENDED_VOLUME_MONTHLY: Record<MuscleGroup, { min: number; max: number }> = Object.fromEntries(
+  Object.entries(RECOMMENDED_VOLUME_WEEKLY).map(([muscle, volume]) => [
+    muscle,
+    { min: volume.min * 4, max: volume.max * 4 },
+  ])
+) as Record<MuscleGroup, { min: number; max: number }>;
 
 // For backward compatibility
 export const RECOMMENDED_VOLUME = RECOMMENDED_VOLUME_WEEKLY;

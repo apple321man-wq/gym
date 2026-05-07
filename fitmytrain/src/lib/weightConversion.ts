@@ -444,6 +444,9 @@ export function calculateAssistanceFromEffective(
 export function getExerciseCoefficient(exerciseId: string): {
   baseExercise: BasePMExercise;
   coefficient: number;
+  note?: string;
+  isBodyweight?: boolean;
+  isAssisted?: boolean;
 } | null {
   return EXERCISE_WEIGHT_COEFFICIENTS[exerciseId] || null;
 }

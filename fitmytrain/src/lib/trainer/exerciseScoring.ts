@@ -1,8 +1,14 @@
 import { EXERCISES, getExerciseById } from '@/data/exercises';
 import { getExerciseMetadata, isExerciseSafeForUser } from '@/data/exerciseMetadata';
 import { getExtendedCoreExerciseById, type MovementGroup } from '@/data/exercisesExtended';
+import { getMuscleVolumeLimit } from './volumeBalancer';
 import type { EquipmentType, FatigueLevel, InjuryArea } from '@/types/exercise-metadata';
 import type { Exercise, ExperienceLevel, MuscleGroup, TrainingGoal } from '@/types/training';
+
+const VOLUME_BIAS_SCORE_WEIGHT = 20;
+const MAX_VOLUME_BIAS_IMPACT_PER_EXERCISE = 8;
+const OVER_VOLUME_HARD_PENALTY = -80;
+const RECOVERY_HARD_PENALTY = -65;
 
 export interface ExerciseScoringContext {
   goal: TrainingGoal;
@@ -14,6 +20,7 @@ export interface ExerciseScoringContext {
   injuries?: InjuryArea[];
   usedMovementGroups?: MovementGroup[];
   volumeBias?: Partial<Record<MuscleGroup, number>>;
+  volumeByMuscle?: Partial<Record<MuscleGroup, number>>;
   weekIndex?: number;
 }
 
@@ -54,13 +61,66 @@ function getPriorityScore(exercise: Exercise, priorityMuscles: MuscleGroup[]): n
   return score;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function getVolumeBiasScore(exercise: Exercise, volumeBias: Partial<Record<MuscleGroup, number>> = {}): number {
-  return exercise.muscleLoads.reduce((score, load) => {
+  const rawScore = exercise.muscleLoads.reduce((score, load) => {
     const bias = volumeBias[load.muscleGroup] ?? 0;
-    if (load.loadType === 'primary') return score + bias;
-    if (load.loadType === 'secondary') return score + bias * 0.5;
-    return score + bias * 0.25;
+    if (load.loadType === 'primary') return score + bias * VOLUME_BIAS_SCORE_WEIGHT;
+    if (load.loadType === 'secondary') return score + bias * VOLUME_BIAS_SCORE_WEIGHT * 0.5;
+    return score + bias * VOLUME_BIAS_SCORE_WEIGHT * 0.25;
   }, 0);
+
+  return clamp(rawScore, -MAX_VOLUME_BIAS_IMPACT_PER_EXERCISE, MAX_VOLUME_BIAS_IMPACT_PER_EXERCISE);
+}
+
+function getVolumeConstraintScore(
+  exercise: Exercise,
+  volumeByMuscle: Partial<Record<MuscleGroup, number>> = {}
+): number {
+  let score = 0;
+
+  for (const load of exercise.muscleLoads) {
+    const limits = getMuscleVolumeLimit(load.muscleGroup);
+    const currentVolume = volumeByMuscle[load.muscleGroup] ?? 0;
+    if (currentVolume <= limits.max) continue;
+
+    if (load.loadType === 'primary') score += OVER_VOLUME_HARD_PENALTY;
+    if (load.loadType === 'secondary') score += Math.round(OVER_VOLUME_HARD_PENALTY * 0.55);
+    if (load.loadType === 'tertiary') score += Math.round(OVER_VOLUME_HARD_PENALTY * 0.25);
+  }
+
+  return score;
+}
+
+function getRecentlyLoadedMuscles(recentExerciseIds: string[] = []): Set<MuscleGroup> {
+  const muscles = new Set<MuscleGroup>();
+
+  for (const exerciseId of recentExerciseIds.slice(-8)) {
+    const extendedExercise = getExtendedCoreExerciseById(exerciseId);
+    if (!extendedExercise) continue;
+    extendedExercise.muscles.primary.forEach(muscle => muscles.add(muscle));
+  }
+
+  return muscles;
+}
+
+function getRecoveryConstraintScore(
+  exercise: Exercise,
+  recentExerciseIds: string[] = [],
+  fatigueLevel?: FatigueLevel
+): number {
+  const extendedExercise = getExtendedCoreExerciseById(exercise.id);
+  if (!extendedExercise) return 0;
+
+  const recentlyLoadedMuscles = getRecentlyLoadedMuscles(recentExerciseIds);
+  const repeatsPrimaryMuscle = extendedExercise.muscles.primary.some(muscle => recentlyLoadedMuscles.has(muscle));
+  const highLoad = exercise.type === 'compound' || extendedExercise.difficulty >= 4;
+
+  if (!repeatsPrimaryMuscle || !highLoad) return 0;
+  return fatigueLevel === 'low' ? -35 : RECOVERY_HARD_PENALTY;
 }
 
 function getGoalScore(exercise: Exercise, goal: TrainingGoal): number {
@@ -148,6 +208,8 @@ export function scoreExercise(exercise: Exercise, context: ExerciseScoringContex
     + safetyScore
     + getEquipmentScore(exercise.id, context.equipment)
     + movementGroupScore
+    + getVolumeConstraintScore(exercise, context.volumeByMuscle)
+    + getRecoveryConstraintScore(exercise, context.recentExerciseIds, context.fatigueLevel)
     + getVolumeBiasScore(exercise, context.volumeBias)
     + getPriorityScore(exercise, context.priorityMuscles)
     + getGoalScore(exercise, context.goal)

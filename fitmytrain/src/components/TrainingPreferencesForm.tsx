@@ -12,12 +12,12 @@ import {
   EQUIPMENT_LABELS, 
   INJURY_LABELS 
 } from '@/types/exercise-metadata';
-import { MuscleGroup, MUSCLE_GROUP_LABELS } from '@/types/training';
+import { MuscleGroup, MUSCLE_GROUP_LABELS, PRIORITY_MUSCLE_GROUPS } from '@/types/training';
 import { AlertTriangle, Dumbbell, Target, Loader2, BookOpen, Zap, BarChart3, ChevronDown } from 'lucide-react';
 
 const ALL_EQUIPMENT: EquipmentType[] = ['barbell', 'dumbbells', 'machines', 'cables', 'bodyweight', 'kettlebell', 'bands'];
 const ALL_INJURIES: InjuryArea[] = ['knee', 'shoulder', 'lower_back', 'elbow', 'wrist', 'hip', 'ankle', 'neck'];
-const ALL_MUSCLES: MuscleGroup[] = ['chest', 'back', 'quadriceps', 'hamstrings', 'glutes', 'shoulders', 'biceps', 'triceps', 'core'];
+const ALL_MUSCLES: MuscleGroup[] = PRIORITY_MUSCLE_GROUPS;
 
 interface TrainingPreferencesFormProps {
   onComplete?: () => void;

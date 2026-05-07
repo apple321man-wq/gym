@@ -8,6 +8,7 @@ import { useTrainingModifications } from '@/hooks/useTrainingModifications';
 import { INTENSITY_LABELS, MUSCLE_GROUP_LABELS } from '@/types/training';
 import { getExerciseById, getExercisesByMuscle } from '@/data/exercises';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
+import { getUnifiedExerciseById } from '@/data/exercisesUnified';
 import { calculateWorkingWeight, generateFeedback } from '@/lib/calculations';
 import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective } from '@/lib/weightConversion';
 import { calculateAdjustedWeight, type RIRLevel, type TrainingType } from '@/lib/rirWeightAdjustment';
@@ -1120,11 +1121,12 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                 // Use normalized database as primary source, fallback to extended/legacy for compatibility
                 const normExercise = getNormalizedExerciseById(pe.exerciseId);
                 const extExercise = getExtendedExerciseById(pe.exerciseId);
+                const unifiedExercise = getUnifiedExerciseById(pe.exerciseId);
                 const legacyExercise = getExerciseById(pe.exerciseId);
                 
                 // Get display data from normalized DB, fallback to extended/legacy or stored name
-                const exerciseName = normExercise?.name ?? extExercise?.name ?? legacyExercise?.name ?? pe.exerciseName;
-                const muscleGroup = normExercise?.primaryMuscles?.[0] ?? extExercise?.muscleGroup ?? legacyExercise?.muscleGroup;
+                const exerciseName = normExercise?.name ?? extExercise?.name ?? unifiedExercise?.name.ru ?? legacyExercise?.name ?? pe.exerciseName;
+                const muscleGroup = normExercise?.primaryMuscles?.[0] ?? extExercise?.muscleGroup ?? unifiedExercise?.primaryMuscles?.[0] ?? legacyExercise?.muscleGroup;
                 const category = normExercise?.category ?? (legacyExercise?.type === 'compound' ? 'compound' : 'isolation');
                 const isTimeBased = normExercise?.isTimeBased ?? extExercise?.isTimeBased ?? false;
                 const isCompound = category === 'compound' || category === 'semi_compound';
@@ -1136,7 +1138,14 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                 // Skip if we can't find any info about the exercise
                 if (!exerciseName || !muscleGroup) return null;
 
-                const hasDescription = extExercise?.description;
+                const exerciseDescription = extExercise?.description ?? (unifiedExercise ? {
+                  technique: unifiedExercise.instructions.keyPoints.length > 0
+                    ? unifiedExercise.instructions.keyPoints
+                    : [unifiedExercise.description],
+                  endPoint: unifiedExercise.description,
+                  focus: unifiedExercise.instructions.commonMistakes,
+                } : null);
+                const hasDescription = Boolean(exerciseDescription);
                 const isExpanded = expandedTechnique === pe.id;
 
                 return (
@@ -1155,16 +1164,6 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                           <span className="text-xs text-muted-foreground">
                             {MUSCLE_GROUP_LABELS[muscleGroup]} • {isCompound ? 'База' : 'Изоляция'}
                           </span>
-                          {hasDescription && (
-                            <button
-                              onClick={() => setExpandedTechnique(isExpanded ? null : pe.id)}
-                              className="flex items-center gap-1 text-xs text-primary hover:underline"
-                            >
-                              <Info className="w-3 h-3" />
-                              Техника
-                              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                            </button>
-                          )}
                         </div>
                       </div>
                       
@@ -1203,28 +1202,51 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                       </div>
                     </div>
 
-                    {/* Expandable Technique Description */}
-                    {isExpanded && extExercise?.description && (
-                      <div className="mb-3 p-3 bg-secondary/50 rounded-lg text-sm space-y-3 animate-in slide-in-from-top-2 duration-200">
-                        <div>
-                          <p className="font-semibold text-primary mb-1">📋 Техника выполнения:</p>
-                          <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                            {extExercise.description.technique.map((step, i) => (
-                              <li key={i}>{step}</li>
-                            ))}
-                          </ol>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-primary">🎯 Конечная точка:</p>
-                          <p className="text-muted-foreground">{extExercise.description.endPoint}</p>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-primary mb-1">⚠️ На что обратить внимание:</p>
-                          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                            {extExercise.description.focus.map((item, i) => (
-                              <li key={i}>{item}</li>
-                            ))}
-                          </ul>
+                    {/* Expandable Exercise Description */}
+                    {hasDescription && exerciseDescription && (
+                      <div className="mb-3 overflow-hidden rounded-lg border border-border/70 bg-secondary/35">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTechnique(isExpanded ? null : pe.id)}
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-secondary/60"
+                          aria-expanded={isExpanded}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Info className="h-4 w-4 shrink-0 text-primary" />
+                            <span className="truncate text-sm font-medium">Описание и техника</span>
+                          </span>
+                          {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                        </button>
+                        <div className={cn(
+                          'grid transition-all duration-300 ease-in-out',
+                          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                        )}>
+                          <div className="min-h-0 overflow-hidden">
+                            <div className="space-y-3 border-t border-border/60 px-3 py-3 text-sm">
+                              <div>
+                                <p className="mb-1 font-semibold text-primary">Техника выполнения</p>
+                                <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
+                                  {exerciseDescription.technique.map((step, i) => (
+                                    <li key={i}>{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-primary">Описание</p>
+                                <p className="text-muted-foreground">{exerciseDescription.endPoint}</p>
+                              </div>
+                              {exerciseDescription.focus.length > 0 && (
+                                <div>
+                                  <p className="mb-1 font-semibold text-primary">Частые ошибки</p>
+                                  <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
+                                    {exerciseDescription.focus.map((item, i) => (
+                                      <li key={i}>{item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}

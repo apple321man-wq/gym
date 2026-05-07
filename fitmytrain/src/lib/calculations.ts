@@ -12,6 +12,7 @@ import {
   WeekStatus,
   MonthStatus,
   LOAD_COEFFICIENTS,
+  MUSCLE_GROUPS,
 } from '@/types/training';
 import { getExerciseById } from '@/data/exercises';
 import { startOfWeek, endOfWeek, getWeek, getYear, startOfMonth, endOfMonth, eachWeekOfInterval } from 'date-fns';
@@ -43,8 +44,7 @@ export function calculateVolumeWithCoefficients(exercises: PlannedExercise[]): M
   const volumeMap = new Map<MuscleGroup, number>();
   
   // Initialize all muscle groups
-  const allMuscles: MuscleGroup[] = ['chest', 'back', 'quadriceps', 'hamstrings', 'glutes', 'shoulders', 'biceps', 'triceps', 'core'];
-  allMuscles.forEach(mg => volumeMap.set(mg, 0));
+  MUSCLE_GROUPS.forEach(mg => volumeMap.set(mg, 0));
 
   exercises.forEach(pe => {
     const exercise = getExerciseById(pe.exerciseId);
@@ -153,8 +153,7 @@ export function calculateMonthlyVolumeRecords(
   
   // Calculate volume for each week and aggregate
   const totalVolumeMap = new Map<MuscleGroup, number>();
-  const allMuscles: MuscleGroup[] = ['chest', 'back', 'quadriceps', 'hamstrings', 'glutes', 'shoulders', 'biceps', 'triceps', 'core'];
-  allMuscles.forEach(mg => totalVolumeMap.set(mg, 0));
+  MUSCLE_GROUPS.forEach(mg => totalVolumeMap.set(mg, 0));
 
   weeks.forEach(week => {
     const weekRecords = calculateWeeklyVolumeRecords(trainingDays, week.start, week.end);

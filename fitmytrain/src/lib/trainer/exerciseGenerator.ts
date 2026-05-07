@@ -7,6 +7,7 @@ import { getScoredExerciseCandidates, scoreExercise } from './exerciseScoring';
 
 const DEFAULT_EQUIPMENT: EquipmentType[] = ['barbell', 'dumbbells', 'machines', 'cables', 'bodyweight'];
 const SCORING_CYCLE_WEEKS = 4;
+const DEFAULT_MAX_CHANGES_PER_DAY = 2;
 
 interface ExerciseGeneratorInput {
   user: TrainerUser;
@@ -18,6 +19,8 @@ interface ExerciseGeneratorInput {
   fatigueLevel?: FatigueLevel;
   exerciseHistory?: string[];
   volumeBias?: Partial<Record<MuscleGroup, number>>;
+  volumeByMuscle?: Partial<Record<MuscleGroup, number>>;
+  maxChangesPerDay?: number;
 }
 
 export function exerciseGenerator(input: ExerciseGeneratorInput) {
@@ -40,6 +43,8 @@ export function exerciseGenerator(input: ExerciseGeneratorInput) {
       smartPlan.sessions.map(session => {
         const usedInSession = new Set<string>();
         const usedMovementGroups = new Set<MovementGroup>();
+        let changesInSession = 0;
+        const maxChangesPerDay = input.maxChangesPerDay ?? DEFAULT_MAX_CHANGES_PER_DAY;
 
         return {
           ...session,
@@ -59,6 +64,7 @@ export function exerciseGenerator(input: ExerciseGeneratorInput) {
                   injuries: input.injuries ?? [],
                   usedMovementGroups: excludeMovementGroupDuplicates ? [...usedMovementGroups] : [],
                   volumeBias: input.volumeBias,
+                  volumeByMuscle: input.volumeByMuscle,
                   weekIndex: (input.user.weekIndex ?? 0) + cycleWeekIndex,
                 }),
               }))
@@ -66,7 +72,11 @@ export function exerciseGenerator(input: ExerciseGeneratorInput) {
 
             const candidates = buildCandidates(true);
             const fallbackCandidates = candidates.length > 0 ? candidates : buildCandidates(false);
-            const selected = fallbackCandidates[0]?.exercise;
+            const originalCandidate = fallbackCandidates.find(candidate => candidate.exercise.id === exercise.exerciseId);
+            const bestCandidate = fallbackCandidates[0]?.exercise;
+            const selected = changesInSession >= maxChangesPerDay
+              ? originalCandidate?.exercise ?? bestCandidate
+              : bestCandidate;
             if (!selected) return exercise;
 
             usedInSession.add(selected.id);
@@ -75,6 +85,9 @@ export function exerciseGenerator(input: ExerciseGeneratorInput) {
               usedMovementGroups.add(movementGroup);
             }
             recentExerciseIds.push(selected.id);
+            if (selected.id !== exercise.exerciseId) {
+              changesInSession++;
+            }
 
             const isPriorityExercise = selected.muscleLoads.some(load =>
               load.loadType === 'primary' && input.priorityMuscles.includes(load.muscleGroup)

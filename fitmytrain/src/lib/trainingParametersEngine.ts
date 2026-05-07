@@ -9,7 +9,7 @@
  * 5. %PM — опциональный слой поверх RIR
  */
 
-import { TrainingGoal, ExperienceLevel, TrainingIntensity, MuscleGroup } from '@/types/training';
+import { TrainingGoal, ExperienceLevel, TrainingIntensity, MuscleGroup, MUSCLE_GROUPS, MUSCLE_GROUP_PARENT } from '@/types/training';
 import { FatigueLevel, ExerciseCategory } from '@/types/exercise-metadata';
 
 // ============================================================================
@@ -17,7 +17,7 @@ import { FatigueLevel, ExerciseCategory } from '@/types/exercise-metadata';
 // ============================================================================
 
 /** Базовый объём по целям (подходов в неделю) */
-const BASE_WEEKLY_VOLUME: Record<TrainingGoal, Record<MuscleGroup, number>> = {
+const BASE_WEEKLY_VOLUME: Record<TrainingGoal, Partial<Record<MuscleGroup, number>>> = {
   muscle_gain: {
     chest: 16, back: 16, quadriceps: 14, hamstrings: 10, glutes: 8,
     shoulders: 12, biceps: 10, triceps: 10, core: 6,
@@ -40,7 +40,7 @@ const BASE_WEEKLY_VOLUME: Record<TrainingGoal, Record<MuscleGroup, number>> = {
  * VOLUME CLAMPS: минимальный и максимальный объём по уровню
  * Защита от MEV/MRV нарушений
  */
-const VOLUME_LIMITS: Record<ExperienceLevel, Record<MuscleGroup, { min: number; max: number }>> = {
+const VOLUME_LIMITS: Record<ExperienceLevel, Partial<Record<MuscleGroup, { min: number; max: number }>>> = {
   beginner: {
     chest: { min: 6, max: 12 },
     back: { min: 6, max: 14 },
@@ -162,9 +162,11 @@ export function calculateTargetVolume(params: VolumeCalculationParams): VolumeCa
   const volumes: Record<MuscleGroup, number> = {} as Record<MuscleGroup, number>;
   const perMuscle: VolumeTrace['perMuscle'] = {} as VolumeTrace['perMuscle'];
   
-  for (const [muscle, base] of Object.entries(baseVolume)) {
-    const muscleGroup = muscle as MuscleGroup;
-    const muscleLimit = limits[muscleGroup];
+  for (const muscleGroup of MUSCLE_GROUPS) {
+    const base = baseVolume[muscleGroup] ?? baseVolume[MUSCLE_GROUP_PARENT[muscleGroup]] ?? 6;
+    const muscleLimit = limits[muscleGroup]
+      ?? limits[MUSCLE_GROUP_PARENT[muscleGroup]]
+      ?? { min: 4, max: 12 };
     
     // Приоритет: +15%, но затухает после 6 недель
     let priorityBonus = 1.0;

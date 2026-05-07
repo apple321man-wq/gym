@@ -110,6 +110,8 @@ export interface AdaptiveUserState {
   plannedSets?: number;
   missedWorkouts?: number;
   fatigue?: FatigueLevel;
+  recentRpe?: number[];
+  recentFatigue?: FatigueLevel[];
   consistency?: number;
 }
 

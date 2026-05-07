@@ -11,11 +11,17 @@ const DAY_ORDER: Record<WeekDay, number> = {
   sunday: 6,
 };
 
+const DEFAULT_TRAINING_DAYS: WeekDay[] = ['monday', 'wednesday', 'friday', 'saturday', 'sunday'];
+
 export function frequencyEngine(user: TrainerUser, availableDays: WeekDay[]): FrequencyPlan {
-  const selectedDays = [...availableDays].sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b]);
+  const weeklyTrainings = availableDays.length || user.weeklyTrainings || 3;
+  const sourceDays = availableDays.length > 0
+    ? availableDays
+    : DEFAULT_TRAINING_DAYS.slice(0, weeklyTrainings);
+  const selectedDays = [...sourceDays].sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b]);
 
   return {
-    weeklyTrainings: selectedDays.length || user.weeklyTrainings || 3,
+    weeklyTrainings: selectedDays.length,
     selectedDays,
   };
 }

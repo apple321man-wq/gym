@@ -8,7 +8,7 @@ import { genderAdapter } from './genderAdapter';
 import { goalAdapter } from './goalAdapter';
 import { getTargetWeightFromOneRM, oneRMAdapter } from './oneRMAdapter';
 import { applyProgression, progressionEngine } from './progressionEngine';
-import { restEngine } from './restEngine';
+import { applyRestPlan, restEngine } from './restEngine';
 import { splitEngine } from './splitEngine';
 import { volumeAdjuster } from './volumeAdjuster';
 import { volumeBalancer } from './volumeBalancer';
@@ -104,14 +104,20 @@ export function buildWorkoutPlan(input: BuildWorkoutPlanInput): BuildWorkoutPlan
   };
 
   const generatedProgram = exerciseGenerator(generatorInput);
-  const initialVolumeBalance = volumeBalancer(generatedProgram);
+  const initialVolumeBalance = volumeBalancer(generatedProgram, {
+    recentExerciseIds: input.exerciseHistory,
+  });
   const balancedGeneratedProgram = exerciseGenerator({
     ...generatorInput,
     volumeBias: initialVolumeBalance.bias,
+    volumeByMuscle: initialVolumeBalance.volumeByMuscle,
+    maxChangesPerDay: 2,
   });
-  const volumeBalance = volumeBalancer(balancedGeneratedProgram);
 
   const program = volumeAdjuster(balancedGeneratedProgram);
+  const volumeBalance = volumeBalancer(program, {
+    recentExerciseIds: input.exerciseHistory,
+  });
   const startDate = normalizeStartDate(input.startDate);
   const baseDays = buildCalendarDays(
     program.sessions,
@@ -125,8 +131,9 @@ export function buildWorkoutPlan(input: BuildWorkoutPlanInput): BuildWorkoutPlan
     goal: goal.goal,
     startWeekIndex: progression.startWeekIndex,
   });
-  const { plan: adaptiveDays, adaptive } = buildAdaptiveWorkout(progressedDays, input.userState);
   const rest = restEngine();
+  const restedDays = applyRestPlan(progressedDays, goal.goal);
+  const { plan: adaptiveDays, adaptive } = buildAdaptiveWorkout(restedDays, input.userState);
 
   return {
     days: adaptiveDays,

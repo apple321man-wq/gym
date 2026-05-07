@@ -7,7 +7,7 @@ interface VolumeChartProps {
   volumes: WeeklyVolume[];
 }
 
-const MUSCLE_COLORS: Record<MuscleGroup, string> = {
+const MUSCLE_COLORS: Partial<Record<MuscleGroup, string>> = {
   chest: 'bg-muscle-chest',
   back: 'bg-muscle-back',
   quadriceps: 'bg-muscle-legs',
@@ -59,7 +59,7 @@ export function VolumeChart({ volumes }: VolumeChartProps) {
                 <div 
                   className={cn(
                     'h-full rounded-full transition-all duration-500',
-                    MUSCLE_COLORS[volume.muscleGroup]
+                    MUSCLE_COLORS[volume.muscleGroup] ?? 'bg-primary'
                   )}
                   style={{ width: `${barWidth}%` }}
                 />

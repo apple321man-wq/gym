@@ -16,6 +16,25 @@ function getCompletionRate(userState: AdaptiveUserState): number | null {
   return Math.min(1, Math.max(0, userState.completedSets / userState.plannedSets));
 }
 
+function getAverage(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getFatigueValue(fatigue: AdaptiveUserState['fatigue']): number {
+  if (fatigue === 'high') return 3;
+  if (fatigue === 'medium') return 2;
+  return 1;
+}
+
+function hasHighGlobalFatigue(userState: AdaptiveUserState): boolean {
+  const recentRpeAverage = getAverage((userState.recentRpe ?? []).slice(-3));
+  const recentFatigueAverage = getAverage((userState.recentFatigue ?? []).slice(-3).map(getFatigueValue));
+
+  return (recentRpeAverage !== null && recentRpeAverage >= 8.5)
+    || (recentFatigueAverage !== null && recentFatigueAverage >= 2.5);
+}
+
 function roundToTrainingWeight(weight: number): number {
   return Math.round(weight / 2.5) * 2.5;
 }
@@ -91,7 +110,8 @@ function getFrequencyDropDates(plan: BulkTrainingDay[]): Set<string> {
 function getAdaptiveDecisions(userState: AdaptiveUserState): AdaptiveDecision[] {
   const completionRate = getCompletionRate(userState);
   const decisions: AdaptiveDecision[] = [];
-  const highRpe = userState.avgRpe !== undefined && userState.avgRpe >= 9;
+  const globalFatigueHigh = hasHighGlobalFatigue(userState);
+  const highRpe = (userState.avgRpe !== undefined && userState.avgRpe >= 9) || globalFatigueHigh;
   const lowRpe = userState.avgRpe !== undefined && userState.avgRpe <= 6.5;
   const lowCompletion = completionRate !== null && completionRate < 0.75;
   const highCompletion = completionRate !== null && completionRate >= 0.9;
@@ -104,7 +124,7 @@ function getAdaptiveDecisions(userState: AdaptiveUserState): AdaptiveDecision[] 
     decisions.push({
       type: 'decrease_load',
       multiplier: highFatigue || lowCompletion ? 0.9 : 0.95,
-      reason: 'high_effort_or_low_completion',
+      reason: globalFatigueHigh ? 'global_fatigue' : 'high_effort_or_low_completion',
     });
   } else if (lowRpe && highCompletion && lowFatigue && (userState.consistency ?? 1) >= 0.8) {
     decisions.push({
