@@ -12,7 +12,7 @@ import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exerc
 import { UNIFIED_EXERCISES, getUnifiedExerciseForId, type UnifiedExercise } from '@/data/exercisesUnified';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Lock, Info, ChevronDown, ChevronUp, Ban, Scale, Gauge } from 'lucide-react';
-import { convertWeightBetweenExercises, getExerciseCoefficient } from '@/lib/weightConversion';
+import { convertWeightBetweenExercises, getExerciseCoefficient, getExerciseWeightUnitLabel, getExerciseWeightUnitSuffix } from '@/lib/weightConversion';
 import { formatWeight } from '@/lib/weightFormat';
 import {
   getDetailedMovementPattern,
@@ -158,6 +158,8 @@ function getWeightConversionInfo(
   const targetWeightId = getWeightId(targetExerciseId);
   const sourceCoef = getExerciseCoefficient(sourceWeightId);
   const targetCoef = getExerciseCoefficient(targetWeightId);
+  const sourceUnitLabel = getExerciseWeightUnitLabel(sourceExerciseId);
+  const targetUnitLabel = getExerciseWeightUnitLabel(targetExerciseId);
 
   if (!currentWeight || currentWeight <= 0) {
     return {
@@ -180,7 +182,7 @@ function getWeightConversionInfo(
 
   return {
     canConvert: true,
-    text: `Коэффициент ${(ratio * tagMultiplier).toFixed(2)}: ${formatWeight(currentWeight)} × ${pieces.join(' ')} = ${formatWeight(adjustedWeight)}`,
+    text: `Коэффициент ${(ratio * tagMultiplier).toFixed(2)}: ${formatWeight(currentWeight)} (${sourceUnitLabel}) × ${pieces.join(' ')} = ${formatWeight(adjustedWeight)} (${targetUnitLabel})`,
   };
 }
 
@@ -507,7 +509,7 @@ export function ExerciseAlternativesDialog({
                           'mt-1 font-semibold',
                           alt.conversionInfo.canConvert ? 'text-foreground' : 'text-muted-foreground'
                         )}>
-                          {alt.conversionInfo.canConvert ? formatWeight(alt.adjustedWeight) : 'нет расчета'}
+                          {alt.conversionInfo.canConvert ? `${formatWeight(alt.adjustedWeight)}${getExerciseWeightUnitSuffix(alt.exerciseId)}` : 'нет расчета'}
                         </p>
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import { generateSmartPlan } from '@/lib/smartPlanGenerator';
+import { generateSmartPlan, type GeneratedExercise } from '@/lib/smartPlanGenerator';
 import { getExtendedCoreExerciseById, type MovementGroup } from '@/data/exercisesExtended';
 import type { EquipmentType, FatigueLevel, InjuryArea } from '@/types/exercise-metadata';
 import type { MuscleGroup, TrainingGoal } from '@/types/training';
@@ -8,6 +8,11 @@ import { getScoredExerciseCandidates, scoreExercise } from './exerciseScoring';
 const DEFAULT_EQUIPMENT: EquipmentType[] = ['barbell', 'dumbbells', 'machines', 'cables', 'bodyweight'];
 const SCORING_CYCLE_WEEKS = 4;
 const DEFAULT_MAX_CHANGES_PER_DAY = 2;
+
+function getDuplicateKey(exerciseId: string): string {
+  const exercise = getExtendedCoreExerciseById(exerciseId);
+  return (exercise?.name ?? exerciseId).trim().toLowerCase();
+}
 
 interface ExerciseGeneratorInput {
   user: TrainerUser;
@@ -42,71 +47,78 @@ export function exerciseGenerator(input: ExerciseGeneratorInput) {
     sessions: Array.from({ length: SCORING_CYCLE_WEEKS }).flatMap((_, cycleWeekIndex) =>
       smartPlan.sessions.map(session => {
         const usedInSession = new Set<string>();
+        const usedDuplicateKeys = new Set<string>();
         const usedMovementGroups = new Set<MovementGroup>();
         let changesInSession = 0;
         const maxChangesPerDay = input.maxChangesPerDay ?? DEFAULT_MAX_CHANGES_PER_DAY;
 
+        const exercises = session.exercises.reduce<GeneratedExercise[]>((result, exercise) => {
+          const buildCandidates = (excludeMovementGroupDuplicates: boolean) => getScoredExerciseCandidates(exercise.exerciseId)
+            .filter(candidate => !usedInSession.has(candidate.id))
+            .filter(candidate => !usedDuplicateKeys.has(getDuplicateKey(candidate.id)))
+            .map(candidate => ({
+              exercise: candidate,
+              score: scoreExercise(candidate, {
+                goal: input.goal,
+                experience: input.user.experience,
+                priorityMuscles: input.priorityMuscles,
+                recentExerciseIds,
+                fatigueLevel: input.fatigueLevel ?? 'low',
+                equipment,
+                injuries: input.injuries ?? [],
+                usedMovementGroups: excludeMovementGroupDuplicates ? [...usedMovementGroups] : [],
+                volumeBias: input.volumeBias,
+                volumeByMuscle: input.volumeByMuscle,
+                weekIndex: (input.user.weekIndex ?? 0) + cycleWeekIndex,
+              }),
+            }))
+            .sort((a, b) => b.score - a.score);
+
+          const candidates = buildCandidates(true);
+          const fallbackCandidates = candidates.length > 0 ? candidates : buildCandidates(false);
+          const originalCandidate = fallbackCandidates.find(candidate => candidate.exercise.id === exercise.exerciseId);
+          const bestCandidate = fallbackCandidates[0]?.exercise;
+          const selected = changesInSession >= maxChangesPerDay
+            ? originalCandidate?.exercise ?? bestCandidate
+            : bestCandidate;
+          if (!selected) return result;
+
+          usedInSession.add(selected.id);
+          usedDuplicateKeys.add(getDuplicateKey(selected.id));
+          const movementGroup = getExtendedCoreExerciseById(selected.id)?.movementGroup;
+          if (movementGroup) {
+            usedMovementGroups.add(movementGroup);
+          }
+          recentExerciseIds.push(selected.id);
+          if (selected.id !== exercise.exerciseId) {
+            changesInSession++;
+          }
+
+          const isPriorityExercise = selected.muscleLoads.some(load =>
+            load.loadType === 'primary' && input.priorityMuscles.includes(load.muscleGroup)
+          );
+
+          result.push({
+            ...exercise,
+            exerciseId: selected.id,
+            exerciseName: selected.name,
+            sets: isPriorityExercise ? Math.min(exercise.sets + 1, 5) : exercise.sets,
+            isModified: exercise.isModified || selected.id !== exercise.exerciseId,
+            originalExerciseId: selected.id !== exercise.exerciseId
+              ? exercise.originalExerciseId ?? exercise.exerciseId
+              : exercise.originalExerciseId,
+            notes: selected.id !== exercise.exerciseId
+              ? [exercise.notes, 'Подобрано scoring engine'].filter(Boolean).join(' · ')
+              : exercise.notes,
+          });
+
+          return result;
+        }, []);
+
         return {
           ...session,
           name: `${session.name} · W${cycleWeekIndex + 1}`,
-          exercises: session.exercises.map(exercise => {
-            const buildCandidates = (excludeMovementGroupDuplicates: boolean) => getScoredExerciseCandidates(exercise.exerciseId)
-              .filter(candidate => !usedInSession.has(candidate.id))
-              .map(candidate => ({
-                exercise: candidate,
-                score: scoreExercise(candidate, {
-                  goal: input.goal,
-                  experience: input.user.experience,
-                  priorityMuscles: input.priorityMuscles,
-                  recentExerciseIds,
-                  fatigueLevel: input.fatigueLevel ?? 'low',
-                  equipment,
-                  injuries: input.injuries ?? [],
-                  usedMovementGroups: excludeMovementGroupDuplicates ? [...usedMovementGroups] : [],
-                  volumeBias: input.volumeBias,
-                  volumeByMuscle: input.volumeByMuscle,
-                  weekIndex: (input.user.weekIndex ?? 0) + cycleWeekIndex,
-                }),
-              }))
-              .sort((a, b) => b.score - a.score);
-
-            const candidates = buildCandidates(true);
-            const fallbackCandidates = candidates.length > 0 ? candidates : buildCandidates(false);
-            const originalCandidate = fallbackCandidates.find(candidate => candidate.exercise.id === exercise.exerciseId);
-            const bestCandidate = fallbackCandidates[0]?.exercise;
-            const selected = changesInSession >= maxChangesPerDay
-              ? originalCandidate?.exercise ?? bestCandidate
-              : bestCandidate;
-            if (!selected) return exercise;
-
-            usedInSession.add(selected.id);
-            const movementGroup = getExtendedCoreExerciseById(selected.id)?.movementGroup;
-            if (movementGroup) {
-              usedMovementGroups.add(movementGroup);
-            }
-            recentExerciseIds.push(selected.id);
-            if (selected.id !== exercise.exerciseId) {
-              changesInSession++;
-            }
-
-            const isPriorityExercise = selected.muscleLoads.some(load =>
-              load.loadType === 'primary' && input.priorityMuscles.includes(load.muscleGroup)
-            );
-
-            return {
-              ...exercise,
-              exerciseId: selected.id,
-              exerciseName: selected.name,
-              sets: isPriorityExercise ? Math.min(exercise.sets + 1, 5) : exercise.sets,
-              isModified: exercise.isModified || selected.id !== exercise.exerciseId,
-              originalExerciseId: selected.id !== exercise.exerciseId
-                ? exercise.originalExerciseId ?? exercise.exerciseId
-                : exercise.originalExerciseId,
-              notes: selected.id !== exercise.exerciseId
-                ? [exercise.notes, 'Подобрано scoring engine'].filter(Boolean).join(' · ')
-                : exercise.notes,
-            };
-          }),
+          exercises,
         };
       })
     ),
