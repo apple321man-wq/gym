@@ -8,7 +8,7 @@ import { useTrainingModifications } from '@/hooks/useTrainingModifications';
 import { INTENSITY_LABELS, MUSCLE_GROUP_LABELS } from '@/types/training';
 import { getExerciseById, getExercisesByMuscle } from '@/data/exercises';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
-import { getUnifiedExerciseById } from '@/data/exercisesUnified';
+import { getUnifiedExerciseForId } from '@/data/exercisesUnified';
 import { calculateWorkingWeight, generateFeedback } from '@/lib/calculations';
 import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective } from '@/lib/weightConversion';
 import { calculateAdjustedWeight, type RIRLevel, type TrainingType } from '@/lib/rirWeightAdjustment';
@@ -799,8 +799,11 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
   };
 
   const handleReplaceExercise = async (oldExerciseLocalId: string, newExerciseId: string, adjustedWeight?: number) => {
-    const newExercise = getExtendedExerciseById(newExerciseId);
-    if (!newExercise) {
+    const newExtendedExercise = getExtendedExerciseById(newExerciseId);
+    const newUnifiedExercise = getUnifiedExerciseForId(newExerciseId);
+    const newExerciseName = newExtendedExercise?.name ?? newUnifiedExercise?.name.ru;
+
+    if (!newExerciseName) {
       toast.error('Упражнение не найдено в базе');
       return;
     }
@@ -815,7 +818,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
       const updatedSets = adjustedWeight !== undefined 
         ? e.sets.map(s => ({ ...s, targetWeight: adjustedWeight }))
         : e.sets;
-      return { ...e, exerciseId: newExerciseId, exerciseName: newExercise.name, sets: updatedSets };
+      return { ...e, exerciseId: newExerciseId, exerciseName: newExerciseName, sets: updatedSets };
     }));
     setAlternativesDialogExercise(null);
     
@@ -825,7 +828,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
         await updatePlannedExercise({
           id: oldExercise.id,
           exercise_id: newExerciseId,
-          exercise_name: newExercise.name,
+          exercise_name: newExerciseName,
         });
         
         // Update weights in exercise_sets if adjusted
@@ -845,12 +848,12 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
           modification_type: 'replace_exercise',
           original_exercise_id: oldExercise.exerciseId,
           new_exercise_id: newExerciseId,
-          new_exercise_name: newExercise.name,
+          new_exercise_name: newExerciseName,
           new_weight: adjustedWeight,
           order_index: oldExercise.slotIndex, // Use slot index for stable matching
         });
         
-        toast.success(`Упражнение заменено на ${newExercise.name}`);
+        toast.success(`Упражнение заменено на ${newExerciseName}`);
       } catch (error) {
         if (import.meta.env.DEV) {
           console.error('Failed to update exercise in DB:', error);
@@ -1121,7 +1124,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                 // Use normalized database as primary source, fallback to extended/legacy for compatibility
                 const normExercise = getNormalizedExerciseById(pe.exerciseId);
                 const extExercise = getExtendedExerciseById(pe.exerciseId);
-                const unifiedExercise = getUnifiedExerciseById(pe.exerciseId);
+                const unifiedExercise = getUnifiedExerciseForId(pe.exerciseId);
                 const legacyExercise = getExerciseById(pe.exerciseId);
                 
                 // Get display data from normalized DB, fallback to extended/legacy or stored name
@@ -1169,7 +1172,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                       
                       <div className="flex items-center gap-1">
                         {(() => {
-                          const hasAlternatives = extExercise?.alternativesWithTags && extExercise.alternativesWithTags.length > 0;
+                          const hasAlternatives = Boolean((extExercise?.alternativesWithTags && extExercise.alternativesWithTags.length > 0) || (unifiedExercise?.alternatives && unifiedExercise.alternatives.length > 0));
                           if (!hasAlternatives) return null;
                           
                           const validWeights = pe.sets.map(s => s.targetWeight).filter(isValidWeight);

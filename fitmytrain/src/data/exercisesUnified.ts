@@ -11668,6 +11668,105 @@ export const UNIFIED_EXERCISES: UnifiedExercise[] = [
   }
 ];
 
+
+const UNIFIED_EXERCISE_ALIASES: Record<string, string> = {
+  'barbell-squat': 'quads-barbell-squat',
+  squat: 'quads-barbell-squat',
+  'front-squat': 'quads-front-squat',
+  'goblet-squat': 'quads-goblet-squat',
+  'leg-press': 'quads-leg-press',
+  'hack-squat': 'quads-hack-squat',
+  'smith-squat': 'quads-smith-squat',
+  'bulgarian-split-squat': 'quads-bulgarian-split-squat',
+  lunges: 'quads-lunges',
+  'walking-lunge': 'quads-lunges',
+  'dumbbell-lunge': 'quads-lunges',
+  'reverse-lunges': 'quads-reverse-lunges',
+  'leg-extension': 'quads-leg-extension',
+
+  'romanian-deadlift': 'hamstrings-romanian-deadlift',
+  deadlift: 'hamstrings-romanian-deadlift',
+  'stiff-leg-deadlift': 'hamstrings-sldl',
+  'good-morning': 'hamstrings-good-morning',
+  'leg-curl': 'hamstrings-leg-curl-lying',
+  'lying-leg-curl': 'hamstrings-leg-curl-lying',
+  'seated-leg-curl': 'hamstrings-leg-curl-seated',
+
+  'hip-thrust': 'glutes-barbell-hip-thrust',
+  'glute-bridge': 'glutes-bridge',
+  'cable-kickback': 'glutes-cable-kickback',
+
+  'bench-press': 'chest-barbell-flat',
+  'dumbbell-bench-press': 'chest-dumbbell-flat',
+  'dumbbell-press': 'chest-dumbbell-flat',
+  'incline-bench-press': 'chest-incline-barbell',
+  'incline-dumbbell-press': 'chest-incline-dumbbell',
+  dips: 'chest-dips',
+  'assisted-dips': 'chest-dips-assisted',
+  'cable-crossover': 'chest-cable-crossover',
+  'cable-fly': 'chest-cable-crossover',
+  'dumbbell-fly': 'chest-dumbbell-fly',
+  'machine-chest-press': 'chest-machine-seated-press',
+  'chest-press-machine': 'chest-machine-seated-press',
+
+  'pull-up': 'lats-pull-ups-medium',
+  'pull-ups': 'lats-pull-ups-medium',
+  'weighted-pull-ups': 'lats-pull-ups-weighted',
+  'chin-ups': 'lats-pull-ups-medium',
+  'lat-pulldown': 'upperback-pull-ups-wide',
+  'barbell-row': 'upperback-bent-over-row',
+  'dumbbell-row': 'upperback-dumbbell-row',
+  'cable-row': 'upperback-seated-cable-row',
+  'seated-cable-row': 'upperback-seated-cable-row',
+  't-bar-row': 'upperback-t-bar-row',
+  'face-pull': 'upperback-face-pull',
+
+  'overhead-press': 'frontdelt-military-press',
+  'military-press': 'frontdelt-military-press',
+  'dumbbell-shoulder-press': 'frontdelt-seated-dumbbell-press',
+  'arnold-press': 'frontdelt-arnold-press',
+  'lateral-raise': 'sidedelt-lateral-raises',
+  'cable-lateral': 'sidedelt-cable-lateral-raise',
+  'cable-lateral-raise': 'sidedelt-cable-lateral-raise',
+  'rear-delt-fly': 'reardelt-rear-fly-dumbbell',
+  'reverse-pec-deck': 'reardelt-reverse-pec-deck',
+
+  'biceps-curl': 'biceps-dumbbell-curl',
+  'dumbbell-curl': 'biceps-dumbbell-curl',
+  'barbell-curl': 'biceps-barbell-curl',
+  'hammer-curl': 'biceps-hammer-curl',
+  'preacher-curl': 'biceps-preacher-curl',
+  'cable-curl': 'biceps-cable-curl',
+
+  'triceps-pushdown': 'triceps-pushdown',
+  'tricep-pushdown': 'triceps-pushdown',
+  'skull-crusher': 'triceps-skullcrusher',
+  'overhead-tricep-extension': 'triceps-overhead-extension',
+  'close-grip-bench': 'triceps-close-grip-bench-press',
+
+  plank: 'abs-plank',
+  'ab-wheel': 'abs-ab-wheel',
+  'hanging-leg-raise': 'abs-hanging-leg-raises',
+  'lying-leg-raise': 'abs-leg-raises',
+  'cable-crunch': 'abs-cable-crunch',
+  'pallof-press': 'core-pallof-press',
+
+  'standing-calf-raise': 'calves-standing-raise',
+  'seated-calf-raise': 'calves-seated-raise',
+};
+
+export function getUnifiedExerciseCanonicalId(id: string): string {
+  return UNIFIED_EXERCISE_ALIASES[id] ?? id;
+}
+
+export function getUnifiedExerciseForId(id: string): UnifiedExercise | undefined {
+  return getUnifiedExerciseById(id) ?? getUnifiedExerciseById(getUnifiedExerciseCanonicalId(id));
+}
+
+export function getUnifiedExerciseAliases(): Record<string, string> {
+  return UNIFIED_EXERCISE_ALIASES;
+}
+
 export function getUnifiedExerciseById(id: string): UnifiedExercise | undefined {
   return UNIFIED_EXERCISES.find(exercise => exercise.id === id);
 }

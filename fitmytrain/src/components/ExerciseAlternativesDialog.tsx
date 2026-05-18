@@ -7,8 +7,9 @@ import {
   ALTERNATIVE_TAG_DESCRIPTIONS,
   isReplacementAllowed
 } from '@/types/alternatives';
-import { ExperienceLevel, TrainingGoal, MUSCLE_GROUP_LABELS } from '@/types/training';
+import { ExperienceLevel, TrainingGoal, MuscleGroup, MUSCLE_GROUP_LABELS } from '@/types/training';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
+import { UNIFIED_EXERCISES, getUnifiedExerciseForId, type UnifiedExercise } from '@/data/exercisesUnified';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Lock, Info, ChevronDown, ChevronUp, Ban, Scale, Gauge } from 'lucide-react';
 import { convertWeightBetweenExercises, getExerciseCoefficient } from '@/lib/weightConversion';
@@ -19,12 +20,89 @@ import {
   PATTERN_LABELS
 } from '@/lib/movementPatternUtils';
 
-
 const DIFFICULTY_LABELS: Record<string, string> = {
   beginner: 'Новичок',
   intermediate: 'Средний',
   advanced: 'Продвинутый',
 };
+
+const UNIFIED_WEIGHT_ID_ALIASES: Record<string, string> = {
+  'quads-barbell-squat': 'barbell-squat',
+  'quads-front-squat': 'front-squat',
+  'quads-goblet-squat': 'goblet-squat',
+  'quads-leg-press': 'leg-press',
+  'quads-hack-squat': 'hack-squat',
+  'quads-smith-squat': 'smith-squat',
+  'quads-bulgarian-split-squat': 'bulgarian-split-squat',
+  'hamstrings-romanian-deadlift': 'romanian-deadlift',
+  'hamstrings-sldl': 'stiff-leg-deadlift',
+  'hamstrings-good-morning': 'good-morning',
+  'glutes-barbell-hip-thrust': 'hip-thrust',
+  'chest-barbell-flat': 'bench-press',
+  'chest-dumbbell-flat': 'dumbbell-bench-press',
+  'chest-incline-barbell': 'incline-bench-press',
+  'chest-incline-dumbbell': 'incline-dumbbell-press',
+  'chest-dips': 'dips',
+  'chest-cable-crossover': 'cable-crossover',
+  'chest-machine-seated-press': 'machine-chest-press',
+  'lats-pull-ups-medium': 'pull-ups',
+  'lats-pull-ups-weighted': 'weighted-pull-ups',
+  'upperback-bent-over-row': 'barbell-row',
+  'upperback-dumbbell-row': 'dumbbell-row',
+  'upperback-seated-cable-row': 'cable-row',
+  'upperback-t-bar-row': 't-bar-row',
+  'frontdelt-military-press': 'overhead-press',
+  'frontdelt-seated-dumbbell-press': 'dumbbell-shoulder-press',
+  'sidedelt-lateral-raises': 'lateral-raise',
+  'sidedelt-cable-lateral-raise': 'cable-lateral-raise',
+  'biceps-dumbbell-curl': 'dumbbell-curl',
+  'biceps-barbell-curl': 'barbell-curl',
+  'biceps-hammer-curl': 'hammer-curl',
+  'biceps-preacher-curl': 'preacher-curl',
+  'biceps-cable-curl': 'cable-curl',
+  'triceps-pushdown': 'triceps-pushdown',
+  'triceps-skullcrusher': 'skull-crusher',
+  'triceps-overhead-extension': 'overhead-tricep-extension',
+  'triceps-close-grip-bench-press': 'close-grip-bench',
+  'abs-plank': 'plank',
+  'abs-ab-wheel': 'ab-wheel',
+  'abs-hanging-leg-raises': 'hanging-leg-raise',
+  'abs-leg-raises': 'lying-leg-raise',
+  'abs-cable-crunch': 'cable-crunch',
+  'core-pallof-press': 'pallof-press',
+  'calves-standing-raise': 'standing-calf-raise',
+  'calves-seated-raise': 'seated-calf-raise',
+};
+
+type DisplayDescription = {
+  technique: string[];
+  endPoint: string;
+  focus: string[];
+};
+
+type DisplayExercise = {
+  name: string;
+  muscleGroup: MuscleGroup;
+  description?: DisplayDescription;
+};
+
+type AlternativeOption = {
+  exerciseId: string;
+  tag: AlternativeTag;
+  comment?: string;
+  exercise: DisplayExercise;
+  allowed: boolean;
+  warning?: string;
+  adjustedWeight: number;
+  coefficientDiffers: boolean;
+  similarityScore: number;
+  conversionInfo: { canConvert: boolean; text: string };
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+};
+
+function getWeightId(exerciseId: string): string {
+  return UNIFIED_WEIGHT_ID_ALIASES[exerciseId] ?? exerciseId;
+}
 
 function getTagSimilarityScore(tag: AlternativeTag): number {
   if (tag === 'equal') return 40;
@@ -39,6 +117,36 @@ function getSimilarityLabel(score: number): string {
   return 'Другая нагрузка';
 }
 
+function getMuscleLabel(muscle: MuscleGroup): string {
+  return MUSCLE_GROUP_LABELS[muscle] ?? muscle;
+}
+
+function toUnifiedDescription(exercise: UnifiedExercise): DisplayDescription {
+  return {
+    technique: exercise.instructions.keyPoints.length > 0
+      ? exercise.instructions.keyPoints
+      : [exercise.description],
+    endPoint: exercise.description,
+    focus: exercise.instructions.commonMistakes,
+  };
+}
+
+function toUnifiedDisplayExercise(exercise: UnifiedExercise): DisplayExercise {
+  return {
+    name: exercise.name.ru,
+    muscleGroup: exercise.primaryMuscles[0] ?? exercise.sourceMuscle,
+    description: toUnifiedDescription(exercise),
+  };
+}
+
+function toExtendedDisplayExercise(exercise: NonNullable<ReturnType<typeof getExtendedExerciseById>>): DisplayExercise {
+  return {
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    description: exercise.description,
+  };
+}
+
 function getWeightConversionInfo(
   sourceExerciseId: string,
   targetExerciseId: string,
@@ -46,8 +154,10 @@ function getWeightConversionInfo(
   adjustedWeight: number,
   tag: AlternativeTag
 ): { canConvert: boolean; text: string } {
-  const sourceCoef = getExerciseCoefficient(sourceExerciseId);
-  const targetCoef = getExerciseCoefficient(targetExerciseId);
+  const sourceWeightId = getWeightId(sourceExerciseId);
+  const targetWeightId = getWeightId(targetExerciseId);
+  const sourceCoef = getExerciseCoefficient(sourceWeightId);
+  const targetCoef = getExerciseCoefficient(targetWeightId);
 
   if (!currentWeight || currentWeight <= 0) {
     return {
@@ -72,6 +182,40 @@ function getWeightConversionInfo(
     canConvert: true,
     text: `Коэффициент ${(ratio * tagMultiplier).toFixed(2)}: ${formatWeight(currentWeight)} × ${pieces.join(' ')} = ${formatWeight(adjustedWeight)}`,
   };
+}
+
+function getOverlapScore(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  const aSet = new Set(a);
+  const matches = b.filter(item => aSet.has(item)).length;
+  return matches / Math.max(a.length, b.length);
+}
+
+function getUnifiedSimilarityScore(current: UnifiedExercise, candidate: UnifiedExercise): number {
+  const primaryOverlap = getOverlapScore(current.primaryMuscles, candidate.primaryMuscles);
+  const allMuscleOverlap = getOverlapScore(current.muscleGroups, candidate.muscleGroups);
+  const sameSource = current.sourceMuscle === candidate.sourceMuscle;
+  const sameHighLevel = current.highLevelGroup === candidate.highLevelGroup;
+  const sameEquipment = current.equipment.some(eq => candidate.equipment.includes(eq));
+  const difficultyGap = Math.abs(current.difficultyScore - candidate.difficultyScore);
+  const explicitAlternative = current.alternatives.some(alt => alt.id === candidate.id)
+    || candidate.alternatives.some(alt => alt.id === current.id);
+
+  return Math.max(0, Math.min(100, Math.round(
+    (explicitAlternative ? 24 : 0)
+    + primaryOverlap * 34
+    + allMuscleOverlap * 22
+    + (sameSource ? 10 : 0)
+    + (sameHighLevel ? 6 : 0)
+    + (sameEquipment ? 4 : 0)
+    - difficultyGap * 3
+  )));
+}
+
+function getUnifiedTag(score: number): AlternativeTag {
+  if (score >= 82) return 'equal';
+  if (score >= 58) return 'reduced_weight';
+  return 'pump';
 }
 
 interface ExerciseAlternativesDialogProps {
@@ -101,110 +245,131 @@ export function ExerciseAlternativesDialog({
   const [expandedInfo, setExpandedInfo] = useState<string | null>(null);
 
   const currentExercise = getExtendedExerciseById(exerciseId);
+  const currentUnified = getUnifiedExerciseForId(exerciseId);
   const currentNormalized = getNormalizedExerciseById(exerciseId);
   const currentPattern = getDetailedMovementPattern(exerciseId);
+  const currentDisplayExercise: DisplayExercise | undefined = currentExercise
+    ? toExtendedDisplayExercise(currentExercise)
+    : currentUnified
+      ? toUnifiedDisplayExercise(currentUnified)
+      : undefined;
 
-  const alternatives = useMemo(() => {
-    if (!currentExercise?.alternativesWithTags) return [];
+  const alternatives = useMemo<AlternativeOption[]>(() => {
+    const options = new Map<string, AlternativeOption>();
+    const sourceWeightId = getWeightId(exerciseId);
 
-    // Фильтруем альтернативы по совместимости паттерна движения
-    return currentExercise.alternativesWithTags
-      .filter(alt => {
-        // Проверяем совместимость паттерна движения
-        if (!canReplaceByPattern(exerciseId, alt.exerciseId)) {
-          return false;
-        }
+    const addOption = (
+      candidateId: string,
+      tag: AlternativeTag,
+      exercise: DisplayExercise,
+      difficulty: 'beginner' | 'intermediate' | 'advanced',
+      similarityScore: number,
+      comment?: string
+    ) => {
+      if (candidateId === exerciseId) return;
 
-        // Проверяем что альтернатива существует
-        const altExercise = getExtendedExerciseById(alt.exerciseId);
-        if (!altExercise) return false;
+      const { allowed, warning } = isReplacementAllowed(
+        tag,
+        experience,
+        goal,
+        currentPumpCount,
+        totalExercises
+      );
 
-        // Compound упражнения не заменяем на isolation (если исходное compound)
-        const altNormalized = getNormalizedExerciseById(alt.exerciseId);
-        if (currentNormalized?.category === 'compound' && altNormalized?.category === 'isolation') {
-          return false;
-        }
+      const targetWeightId = getWeightId(candidateId);
+      let adjustedWeight = convertWeightBetweenExercises(sourceWeightId, targetWeightId, currentWeight);
+      if (tag === 'pump') {
+        adjustedWeight = Math.round(adjustedWeight * 0.85 / 2.5) * 2.5;
+      }
 
-        return true;
-      })
-      .map(alt => {
-        const altExercise = getExtendedExerciseById(alt.exerciseId);
-        if (!altExercise) return null;
+      const sourceCoef = getExerciseCoefficient(sourceWeightId);
+      const targetCoef = getExerciseCoefficient(targetWeightId);
+      const coefficientDiffers = Boolean(sourceCoef && targetCoef && sourceCoef.coefficient !== targetCoef.coefficient);
+      const conversionInfo = getWeightConversionInfo(exerciseId, candidateId, currentWeight, adjustedWeight, tag);
+      const existing = options.get(candidateId);
 
-        const { allowed, warning } = isReplacementAllowed(
-          alt.tag,
-          experience,
-          goal,
-          currentPumpCount,
-          totalExercises
+      const option: AlternativeOption = {
+        exerciseId: candidateId,
+        tag,
+        comment,
+        exercise,
+        allowed,
+        warning,
+        adjustedWeight,
+        coefficientDiffers,
+        similarityScore,
+        conversionInfo,
+        difficulty,
+      };
+
+      if (!existing || option.similarityScore > existing.similarityScore) {
+        options.set(candidateId, option);
+      }
+    };
+
+    currentExercise?.alternativesWithTags?.forEach(alt => {
+      if (!canReplaceByPattern(exerciseId, alt.exerciseId)) return;
+
+      const altExercise = getExtendedExerciseById(alt.exerciseId);
+      if (!altExercise) return;
+
+      const altNormalized = getNormalizedExerciseById(alt.exerciseId);
+      if (currentNormalized?.category === 'compound' && altNormalized?.category === 'isolation') return;
+
+      const sourceCoef = getExerciseCoefficient(sourceWeightId);
+      const targetCoef = getExerciseCoefficient(getWeightId(alt.exerciseId));
+      const sameMuscle = currentExercise.muscleGroup === altExercise.muscleGroup;
+      const sameCategory = currentNormalized?.category === altNormalized?.category;
+      const sameBase = Boolean(sourceCoef && targetCoef && sourceCoef.baseExercise === targetCoef.baseExercise);
+      const difficulty = altNormalized?.riskLevel === 'high'
+        ? 'advanced'
+        : altNormalized?.riskLevel === 'medium'
+          ? 'intermediate'
+          : 'beginner';
+      const score = Math.min(100, Math.round(
+        getTagSimilarityScore(alt.tag)
+        + (sameMuscle ? 24 : 10)
+        + (sameCategory ? 16 : 6)
+        + (sameBase ? 14 : 0)
+        + (sourceCoef && targetCoef && sourceCoef.coefficient !== targetCoef.coefficient ? 2 : 6)
+      ));
+
+      addOption(alt.exerciseId, alt.tag, toExtendedDisplayExercise(altExercise), difficulty, score, alt.comment);
+    });
+
+    if (currentUnified) {
+      UNIFIED_EXERCISES.forEach(candidate => {
+        if (candidate.id === currentUnified.id) return;
+
+        const explicitAlternative = currentUnified.alternatives.some(alt => alt.id === candidate.id)
+          || candidate.alternatives.some(alt => alt.id === currentUnified.id);
+        const relatedMuscle = candidate.muscleGroups.some(muscle => currentUnified.muscleGroups.includes(muscle))
+          || candidate.sourceMuscle === currentUnified.sourceMuscle
+          || candidate.highLevelGroup === currentUnified.highLevelGroup;
+        if (!explicitAlternative && !relatedMuscle) return;
+
+        const score = getUnifiedSimilarityScore(currentUnified, candidate);
+        if (score < 42 && !explicitAlternative) return;
+
+        const tag = getUnifiedTag(score);
+        addOption(
+          candidate.id,
+          tag,
+          toUnifiedDisplayExercise(candidate),
+          candidate.difficulty,
+          score,
+          candidate.equipment.length > 0 ? `Оборудование: ${candidate.equipment.join(', ')}` : undefined
         );
-
-        // Use proper weight conversion based on exercise coefficients
-        // This handles cases like barbell vs dumbbell properly
-        const convertedWeight = convertWeightBetweenExercises(
-          exerciseId,
-          alt.exerciseId,
-          currentWeight
-        );
-
-        // Apply additional tag-based adjustment if needed (pump = extra reduction)
-        let adjustedWeight = convertedWeight;
-        if (alt.tag === 'pump') {
-          // Pump exercises get additional 15% reduction for higher reps
-          adjustedWeight = Math.round(convertedWeight * 0.85 / 2.5) * 2.5;
-        }
-
-        // Check if this alternative has a different coefficient (for UI display)
-        const hasCoefficient = getExerciseCoefficient(alt.exerciseId) !== null;
-        const sourceCoef = getExerciseCoefficient(exerciseId);
-        const targetCoef = getExerciseCoefficient(alt.exerciseId);
-        const coefficientDiffers = hasCoefficient && sourceCoef && targetCoef
-          && sourceCoef.coefficient !== targetCoef.coefficient;
-        const altNormalized = getNormalizedExerciseById(alt.exerciseId);
-        const sameMuscle = currentExercise.muscleGroup === altExercise.muscleGroup;
-        const sameCategory = currentNormalized?.category === altNormalized?.category;
-        const sameBase = Boolean(sourceCoef && targetCoef && sourceCoef.baseExercise === targetCoef.baseExercise);
-        const similarityScore = Math.min(100, Math.round(
-          getTagSimilarityScore(alt.tag)
-          + (sameMuscle ? 24 : 10)
-          + (sameCategory ? 16 : 6)
-          + (sameBase ? 14 : 0)
-          + (coefficientDiffers ? 2 : 6)
-        ));
-        const conversionInfo = getWeightConversionInfo(
-          exerciseId,
-          alt.exerciseId,
-          currentWeight,
-          adjustedWeight,
-          alt.tag
-        );
-        const difficulty = altNormalized?.riskLevel === 'high'
-          ? 'advanced'
-          : altNormalized?.riskLevel === 'medium'
-            ? 'intermediate'
-            : 'beginner';
-
-        return {
-          ...alt,
-          exercise: altExercise,
-          allowed,
-          warning,
-          adjustedWeight,
-          coefficientDiffers, // For UI indication
-          similarityScore,
-          conversionInfo,
-          difficulty,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        if (!a || !b) return 0;
-        if (a.allowed !== b.allowed) return a.allowed ? -1 : 1;
-        return b.similarityScore - a.similarityScore;
       });
-  }, [currentExercise, currentNormalized, exerciseId, experience, goal, currentPumpCount, totalExercises, currentWeight]);
+    }
 
-  const handleSelect = (alt: NonNullable<typeof alternatives[number]>) => {
+    return Array.from(options.values()).sort((a, b) => {
+      if (a.allowed !== b.allowed) return a.allowed ? -1 : 1;
+      return b.similarityScore - a.similarityScore;
+    });
+  }, [currentExercise, currentUnified, currentNormalized, exerciseId, experience, goal, currentPumpCount, totalExercises, currentWeight]);
+
+  const handleSelect = (alt: AlternativeOption) => {
     if (!alt.allowed) return;
     onReplace(alt.exerciseId, alt.adjustedWeight);
     onOpenChange(false);
@@ -236,13 +401,13 @@ export function ExerciseAlternativesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {currentExercise && (
+        {currentDisplayExercise && (
           <div className="mb-4 p-3 bg-secondary/50 rounded-lg">
             <p className="text-sm text-muted-foreground">Текущее упражнение:</p>
-            <p className="font-semibold">{currentExercise.name}</p>
+            <p className="font-semibold">{currentDisplayExercise.name}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">
-                {MUSCLE_GROUP_LABELS[currentExercise.muscleGroup]} • {formatWeight(Math.round(currentWeight * 2) / 2)}
+                {getMuscleLabel(currentDisplayExercise.muscleGroup)} • {currentWeight > 0 ? formatWeight(Math.round(currentWeight * 2) / 2) : 'вес не задан'}
               </span>
               <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
                 {PATTERN_LABELS[currentPattern]}
@@ -262,7 +427,6 @@ export function ExerciseAlternativesDialog({
           </div>
         </div>
 
-        {/* Legend */}
         <div className="mb-4 p-3 bg-muted/30 rounded-lg space-y-2">
           <p className="text-xs font-semibold text-muted-foreground mb-2">Обозначения:</p>
           {(['equal', 'reduced_weight', 'pump'] as AlternativeTag[]).map(tag => (
@@ -275,7 +439,6 @@ export function ExerciseAlternativesDialog({
           ))}
         </div>
 
-        {/* Alternatives list */}
         <div className="space-y-2">
           {alternatives.length === 0 && (
             <div className="text-center py-6">
@@ -284,16 +447,12 @@ export function ExerciseAlternativesDialog({
                 Нет совместимых альтернатив
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Для паттерна «{PATTERN_LABELS[currentPattern]}» не найдено подходящих замен.
-                <br />
-                Замена должна соответствовать тому же типу движения.
+                Для этого упражнения не найдено подходящих замен в базе.
               </p>
             </div>
           )}
 
           {alternatives.map((alt) => {
-            if (!alt) return null;
-
             const isBlocked = !alt.allowed;
             const hasWarning = alt.allowed && alt.warning;
 
@@ -310,7 +469,7 @@ export function ExerciseAlternativesDialog({
                 onClick={() => !isBlocked && handleSelect(alt)}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={cn('text-lg', ALTERNATIVE_TAG_COLORS[alt.tag])}>
                         {getTagIcon(alt.tag)}
@@ -321,7 +480,7 @@ export function ExerciseAlternativesDialog({
 
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className="rounded-full bg-background/70 px-2 py-0.5 text-xs text-muted-foreground">
-                        {MUSCLE_GROUP_LABELS[alt.exercise.muscleGroup]}
+                        {getMuscleLabel(alt.exercise.muscleGroup)}
                       </span>
                       <span className="rounded-full bg-background/70 px-2 py-0.5 text-xs text-muted-foreground">
                         {DIFFICULTY_LABELS[alt.difficulty]}
@@ -384,7 +543,6 @@ export function ExerciseAlternativesDialog({
                   </Button>
                 </div>
 
-                {/* Warning/Block message */}
                 {(isBlocked || hasWarning) && (
                   <div className={cn(
                     'flex items-start gap-2 mt-2 p-2 rounded-lg text-xs',
@@ -395,7 +553,6 @@ export function ExerciseAlternativesDialog({
                   </div>
                 )}
 
-                {/* Expanded technique info */}
                 {expandedInfo === alt.exerciseId && alt.exercise.description && (
                   <div className="mt-3 p-3 bg-background/50 rounded-lg text-xs space-y-2">
                     <div>
@@ -407,17 +564,19 @@ export function ExerciseAlternativesDialog({
                       </ul>
                     </div>
                     <div>
-                      <p className="font-semibold text-primary">Конечная точка:</p>
+                      <p className="font-semibold text-primary">Описание:</p>
                       <p className="text-muted-foreground">{alt.exercise.description.endPoint}</p>
                     </div>
-                    <div>
-                      <p className="font-semibold text-primary mb-1">Внимание:</p>
-                      <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                        {alt.exercise.description.focus.map((item, i) => (
-                          <li key={i}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    {alt.exercise.description.focus.length > 0 && (
+                      <div>
+                        <p className="font-semibold text-primary mb-1">Внимание:</p>
+                        <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
+                          {alt.exercise.description.focus.map((item, i) => (
+                            <li key={i}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -425,7 +584,6 @@ export function ExerciseAlternativesDialog({
           })}
         </div>
 
-        {/* Experience/Goal info */}
         <div className="mt-4 p-3 bg-muted/30 rounded-lg flex items-start gap-2 text-xs">
           <Info className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
           <div className="text-muted-foreground">
@@ -440,7 +598,7 @@ export function ExerciseAlternativesDialog({
               </span>
             </p>
             <p>
-              🔥 упражнений: <span className="font-medium text-foreground">{currentPumpCount}/{totalExercises}</span>
+              База замен: <span className="font-medium text-foreground">{alternatives.length} вариантов</span>
             </p>
           </div>
         </div>

@@ -40,8 +40,10 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   
   // Horizontal push
   'bench-press': 'horizontal_push',
+  'chest-barbell-flat': 'horizontal_push',
   'dumbbell-press': 'horizontal_push',
   'dumbbell-bench-press': 'horizontal_push', // Legacy ID alias
+  'chest-dumbbell-flat': 'horizontal_push',
   'incline-bench-press': 'horizontal_push',
   'incline-dumbbell-press': 'horizontal_push',
   'decline-bench-press': 'horizontal_push',
@@ -80,9 +82,12 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   
   // Squat
   'squat': 'squat',
+  'barbell-squat': 'squat',
+  'quads-barbell-squat': 'squat',
   'front-squat': 'squat',
   'hack-squat': 'squat',
   'leg-press': 'squat',
+  'quads-leg-press': 'squat',
   'belt-squat': 'squat',
   'smith-squat': 'squat',
   'goblet-squat': 'squat',
@@ -97,6 +102,7 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   // Hinge
   'deadlift': 'hinge',
   'romanian-deadlift': 'hinge',
+  'hamstrings-romanian-deadlift': 'hinge',
   'stiff-leg-deadlift': 'hinge',
   'good-morning': 'hinge',
   'sumo-deadlift': 'hinge',
@@ -105,6 +111,7 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   // Hip extension
   'glute-bridge': 'hip_extension',
   'hip-thrust': 'hip_extension',
+  'glutes-barbell-hip-thrust': 'hip_extension',
   'cable-pull-through': 'hip_extension',
   'glute-kickback': 'hip_extension',
   'reverse-hyper': 'hip_extension',
@@ -132,6 +139,7 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   
   // Isolation push (triceps)
   'tricep-pushdown': 'isolation_push',
+  'triceps-pushdown': 'isolation_push',
   'skull-crusher': 'isolation_push',
   'overhead-tricep-extension': 'isolation_push',
   'cable-overhead-extension': 'isolation_push',
@@ -150,11 +158,13 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   
   // Core anti-movement
   'plank': 'core_anti',
+  'abs-plank': 'core_anti',
   'side-plank': 'core_anti',
   'pallof-press': 'core_anti',
   'dead-bug': 'core_anti',
   'bird-dog': 'core_anti',
   'ab-wheel': 'core_anti',
+  'abs-ab-wheel': 'core_anti',
   
   // Core flexion
   'cable-crunch': 'core_flexion',
