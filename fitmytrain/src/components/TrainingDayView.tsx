@@ -9,8 +9,8 @@ import { INTENSITY_LABELS, MUSCLE_GROUP_LABELS } from '@/types/training';
 import { getExerciseById, getExercisesByMuscle } from '@/data/exercises';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
 import { getUnifiedExerciseForId } from '@/data/exercisesUnified';
-import { calculateWorkingWeight, generateFeedback } from '@/lib/calculations';
-import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective } from '@/lib/weightConversion';
+import { calculateWorkingWeight, generateFeedback, calculatePM } from '@/lib/calculations';
+import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective, getExerciseWeightUnitSuffix } from '@/lib/weightConversion';
 import { calculateAdjustedWeight, type RIRLevel, type TrainingType } from '@/lib/rirWeightAdjustment';
 import { checkPMUpdate, getPMUpdateMessage } from '@/lib/pmAutoUpdate';
 import { formatWeight, isValidWeight } from '@/lib/weightFormat';
@@ -114,9 +114,31 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
   const [weightInputBuffer, setWeightInputBuffer] = useState<Record<string, string>>({});
   /** Allowed in-progress input: empty, digits, optional single dot/comma + digits. */
   const WEIGHT_INPUT_REGEX = /^\d{0,4}([.,]\d{0,2})?$/;
+
+  const personalMaxesSignature = useMemo(() => (
+    personalMaxes
+      .map(pm => `${pm.exercise_id}:${pm.estimated_1rm ?? pm.weight}:${pm.reps}:${pm.updated_at}`)
+      .sort()
+      .join('|')
+  ), [personalMaxes]);
+
+  const exercisePickerGroups = useMemo(() => (
+    Object.entries(MUSCLE_GROUP_LABELS)
+      .map(([muscleGroup, label]) => ({
+        muscleGroup,
+        label,
+        exercises: getExercisesByMuscle(muscleGroup as keyof typeof MUSCLE_GROUP_LABELS)
+          .slice()
+          .sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'compound' ? -1 : 1;
+            return a.name.localeCompare(b.name, 'ru');
+          }),
+      }))
+      .filter(group => group.exercises.length > 0)
+  ), []);
   
-  // Track if initial load has happened to prevent recalculation loops
-  const initialLoadRef = useRef(false);
+  // Track the latest loaded data snapshot to prevent recalculation loops.
+  const loadedDataKeyRef = useRef<string | null>(null);
   
   // Track pending modifications to save on "Save" button
   // Now keyed by slot_index for stable identification
@@ -153,9 +175,18 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
   // Initialize exercises from existing day and apply modifications
   useEffect(() => {
     if (!existingDay?.planned_exercises) return;
-    if (initialLoadRef.current && exercises.length > 0) return; // Don't re-init if already loaded
-    
-    initialLoadRef.current = true;
+
+    const loadKey = [
+      existingDay.id,
+      existingDay.is_completed ? 'completed' : 'open',
+      intensity,
+      profile?.weight ?? 'no-bodyweight',
+      personalMaxesSignature,
+      modifications.map(mod => `${mod.id}:${mod.created_at}`).join('|'),
+    ].join('::');
+
+    if (loadedDataKeyRef.current === loadKey) return;
+    loadedDataKeyRef.current = loadKey;
     
     let mapped: LocalExercise[] = existingDay.planned_exercises.map((pe, index) => {
       // Resolve exercise flags: bodyweight-only (no input) / optional external weight (no autofill)
@@ -175,7 +206,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
         const multiplier = intensityRanges[intensity];
         
         // Use coefficient-aware calculation with raw PM values for correct Epley
-        calculatedWeight = calculateWeightFromPM(pe.exercise_id, pm.estimated_1rm || 0, multiplier, profile?.weight, pm.weight, pm.reps);
+        calculatedWeight = calculateWeightFromPM(pe.exercise_id, pm.estimated_1rm ?? calculatePM(pm.weight, pm.reps), multiplier, profile?.weight, pm.weight, pm.reps);
         
         // For bodyweight exercises (pull-ups, chin-ups): recalculate reps based on capacity
         // Pass raw weight & reps (not estimated_1rm) for correct Epley on total load
@@ -352,7 +383,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
     }
     
     setExercises(mapped);
-  }, [existingDay, modifications]); // Include modifications in dependencies
+  }, [existingDay, modifications, intensity, profile?.weight, personalMaxesSignature]);
 
   const handleAddExercise = (exerciseId: string) => {
     const exercise = getExerciseById(exerciseId);
@@ -372,7 +403,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
         const multiplier = intensityRanges[intensity];
 
         // Use coefficient-aware calculation with raw PM values for correct Epley
-        const calc = calculateWeightFromPM(exerciseId, pm.estimated_1rm || 0, multiplier, profile?.weight, pm.weight, pm.reps);
+        const calc = calculateWeightFromPM(exerciseId, pm.estimated_1rm ?? calculatePM(pm.weight, pm.reps), multiplier, profile?.weight, pm.weight, pm.reps);
         workingWeight = isValidWeight(calc) ? calc : null;
       } else {
         const lastLogged = getLastLoggedWeight(exerciseId);
@@ -1345,7 +1376,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
 
 
                                 <span className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap">
-                                  {isTimeBased ? 'сек' : isAssistedExercise(pe.exerciseId) ? 'помощь' : 'кг'}
+                                  {isTimeBased ? 'сек' : isAssistedExercise(pe.exerciseId) ? 'помощь' : `кг${getExerciseWeightUnitSuffix(pe.exerciseId)}`}
                                   {isOptionalWeight && <span className="ml-1 opacity-70">(опц.)</span>}
                                 </span>
 
@@ -1426,32 +1457,27 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 mt-4">
-                  {Object.keys(MUSCLE_GROUP_LABELS).map(mg => {
-                    const muscleGroup = mg as keyof typeof MUSCLE_GROUP_LABELS;
-                    const muscleExercises = getExercisesByMuscle(muscleGroup);
-                    
-                    return (
-                      <div key={mg}>
-                        <h4 className="text-sm font-semibold text-muted-foreground mb-2">
-                          {MUSCLE_GROUP_LABELS[muscleGroup]}
-                        </h4>
-                        <div className="space-y-1">
-                          {muscleExercises.map(ex => (
-                            <button
-                              key={ex.id}
-                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-secondary text-sm flex justify-between items-center"
-                              onClick={() => handleAddExercise(ex.id)}
-                            >
-                              <span>{ex.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {ex.type === 'compound' ? 'База' : 'Изоляция'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                  {exercisePickerGroups.map(group => (
+                    <div key={group.muscleGroup}>
+                      <h4 className="text-sm font-semibold text-muted-foreground mb-2">
+                        {group.label}
+                      </h4>
+                      <div className="space-y-1">
+                        {group.exercises.map(ex => (
+                          <button
+                            key={ex.id}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-secondary text-sm flex justify-between items-center"
+                            onClick={() => handleAddExercise(ex.id)}
+                          >
+                            <span>{ex.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {ex.type === 'compound' ? 'База' : 'Изоляция'}
+                            </span>
+                          </button>
+                        ))}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </DialogContent>
             </Dialog>

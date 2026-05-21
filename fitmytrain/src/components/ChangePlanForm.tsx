@@ -3,6 +3,7 @@ import { useProfile, ProfileUpdate } from '@/hooks/useProfile';
 import { useTrainingDays } from '@/hooks/useTrainingDays';
 import { useExtendedProfile } from '@/hooks/useExtendedProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { usePersonalMaxes } from '@/hooks/usePersonalMaxes';
 import { TrainingGoal, ExperienceLevel, GOAL_LABELS, EXPERIENCE_LABELS, MuscleGroup } from '@/types/training';
 import { InjuryArea, EquipmentType } from '@/types/exercise-metadata';
 import { WeekDay } from '@/data/trainingPrograms';
@@ -12,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { TrainingDaySelection } from '@/components/TrainingDaySelection';
 import { getRecommendedFrequency, TRAINING_RECOMMENDATIONS } from '@/data/trainingPrograms';
 import { buildWorkoutPlan } from '@/lib/trainer/buildWorkoutPlan';
+import { calculatePM } from '@/lib/calculations';
 import { Target, Clock, Dumbbell, Info, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,6 +27,7 @@ export function ChangePlanForm({ onComplete, onCancel }: ChangePlanFormProps) {
   const { profile, updateProfile } = useProfile();
   const { bulkCreateTrainingDays, deleteFutureTrainingDays } = useTrainingDays();
   const { extendedProfile } = useExtendedProfile();
+  const { personalMaxes } = usePersonalMaxes();
   const { toast } = useToast();
   
   const [step, setStep] = useState(1);
@@ -74,6 +77,15 @@ export function ChangePlanForm({ onComplete, onCancel }: ChangePlanFormProps) {
         injuries: (extendedProfile?.injuries || []) as InjuryArea[],
         equipment: (extendedProfile?.equipment || ['barbell', 'dumbbells', 'machines', 'cables', 'bodyweight']) as EquipmentType[],
         fatigueLevel: 'low',
+        personalMaxes: personalMaxes.map(pm => ({
+          id: pm.id,
+          userId: pm.user_id,
+          exerciseId: pm.exercise_id,
+          weight: pm.weight,
+          reps: pm.reps,
+          calculatedPM: pm.estimated_1rm ?? calculatePM(pm.weight, pm.reps),
+          updatedAt: pm.updated_at,
+        })),
       });
 
       await bulkCreateTrainingDays(workoutPlan.days);

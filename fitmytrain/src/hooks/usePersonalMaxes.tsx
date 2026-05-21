@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { EXERCISE_WEIGHT_COEFFICIENTS, BASE_PM_EXERCISES } from '@/lib/weightConversion';
+import { BASE_PM_EXERCISES, getExerciseCoefficient } from '@/lib/weightConversion';
 
 export interface PersonalMax {
   id: string;
@@ -22,7 +22,7 @@ function findBaseExerciseForPM(exerciseId: string): string | null {
   if ((BASE_PM_EXERCISES as readonly string[]).includes(exerciseId)) {
     return exerciseId;
   }
-  const coef = EXERCISE_WEIGHT_COEFFICIENTS[exerciseId];
+  const coef = getExerciseCoefficient(exerciseId);
   if (coef) return coef.baseExercise;
   return null;
 }
