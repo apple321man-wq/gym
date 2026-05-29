@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useBodyMeasurements } from '@/hooks/useBodyMeasurements';
 import { useProfile } from '@/hooks/useProfile';
+import { usePersonalMaxes } from '@/hooks/usePersonalMaxes';
+import { useTrainingDays } from '@/hooks/useTrainingDays';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +25,9 @@ interface BodyMeasurementFormProps {
 
 export function BodyMeasurementForm({ onComplete }: BodyMeasurementFormProps) {
   const { addMeasurement, isAdding } = useBodyMeasurements();
-  const { profile } = useProfile();
+  const { profile, updateProfile, isUpdating } = useProfile();
+  const { personalMaxes } = usePersonalMaxes();
+  const { recalculateFutureBodyweightLoads, isRecalculatingBodyweightLoads } = useTrainingDays();
   
   const [date, setDate] = useState<Date>(new Date());
   const [weight, setWeight] = useState(profile?.weight?.toString() || '');
@@ -66,7 +70,22 @@ export function BodyMeasurementForm({ onComplete }: BodyMeasurementFormProps) {
         notes: null,
       });
 
-      toast.success('Замеры сохранены');
+      const previousWeight = profile?.weight;
+      if (previousWeight !== w) {
+        await updateProfile({ weight: w });
+        const updatedSets = await recalculateFutureBodyweightLoads({
+          bodyweight: w,
+          personalMaxes,
+        });
+
+        if (updatedSets > 0) {
+          toast.success(`Замеры сохранены. Нагрузка с собственным весом пересчитана: ${updatedSets} подходов`);
+        } else {
+          toast.success('Замеры сохранены. Вес профиля обновлён');
+        }
+      } else {
+        toast.success('Замеры сохранены');
+      }
       
       // Reset form
       setWaist('');
@@ -236,8 +255,8 @@ export function BodyMeasurementForm({ onComplete }: BodyMeasurementFormProps) {
           </div>
         </div>
 
-        <Button type="submit" className="w-full" disabled={isAdding}>
-          {isAdding ? (
+        <Button type="submit" className="w-full" disabled={isAdding || isUpdating || isRecalculatingBodyweightLoads}>
+          {isAdding || isUpdating || isRecalculatingBodyweightLoads ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Сохранение...

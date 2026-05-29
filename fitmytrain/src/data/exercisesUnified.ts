@@ -11689,12 +11689,16 @@ const UNIFIED_EXERCISE_ALIASES: Record<string, string> = {
   'stiff-leg-deadlift': 'hamstrings-sldl',
   'good-morning': 'hamstrings-good-morning',
   'leg-curl': 'hamstrings-leg-curl-lying',
+  'nordic-curl': 'hamstrings-nordic-curl',
+  'hyperextension-hold': 'lowerback-hyperextension',
   'lying-leg-curl': 'hamstrings-leg-curl-lying',
   'seated-leg-curl': 'hamstrings-leg-curl-seated',
 
   'hip-thrust': 'glutes-barbell-hip-thrust',
   'glute-bridge': 'glutes-bridge',
   'cable-kickback': 'glutes-cable-kickback',
+  'fitball-hip-raise': 'glutes-bridge',
+  'wall-sit': 'quads-leg-extension',
 
   'bench-press': 'chest-barbell-flat',
   'dumbbell-bench-press': 'chest-dumbbell-flat',
@@ -11721,6 +11725,7 @@ const UNIFIED_EXERCISE_ALIASES: Record<string, string> = {
   'seated-cable-row': 'upperback-seated-cable-row',
   't-bar-row': 'upperback-t-bar-row',
   'face-pull': 'upperback-face-pull',
+  'upright-row': 'sidedelt-upright-row',
 
   'overhead-press': 'frontdelt-military-press',
   'military-press': 'frontdelt-military-press',
@@ -11730,7 +11735,7 @@ const UNIFIED_EXERCISE_ALIASES: Record<string, string> = {
   'cable-lateral': 'sidedelt-cable-lateral-raise',
   'cable-lateral-raise': 'sidedelt-cable-lateral-raise',
   'rear-delt-fly': 'reardelt-rear-fly-dumbbell',
-  'reverse-pec-deck': 'reardelt-reverse-pec-deck',
+  'reverse-pec-deck': 'reardelt-rear-fly-machine',
 
   'biceps-curl': 'biceps-dumbbell-curl',
   'dumbbell-curl': 'biceps-dumbbell-curl',
@@ -11743,9 +11748,12 @@ const UNIFIED_EXERCISE_ALIASES: Record<string, string> = {
   'tricep-pushdown': 'triceps-pushdown',
   'skull-crusher': 'triceps-skullcrusher',
   'overhead-tricep-extension': 'triceps-overhead-extension',
+  'tricep-kickback': 'triceps-cable-overhead',
   'close-grip-bench': 'triceps-close-grip-bench-press',
 
   plank: 'abs-plank',
+  'plank-leg-lift': 'abs-plank',
+  'v-sit-hold': 'abs-v-ups',
   'ab-wheel': 'abs-ab-wheel',
   'hanging-leg-raise': 'abs-hanging-leg-raises',
   'lying-leg-raise': 'abs-leg-raises',

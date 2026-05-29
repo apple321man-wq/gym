@@ -99,9 +99,11 @@ const WEIGHT_COEFFICIENT_ALIASES: Record<string, string> = {
 
   'frontdelt-military-press': 'overhead-press',
   'frontdelt-seated-dumbbell-press': 'dumbbell-shoulder-press',
+  'frontdelt-standing-dumbbell-press': 'dumbbell-overhead-press',
   'frontdelt-machine-shoulder-press': 'machine-shoulder-press',
   'frontdelt-arnold-press': 'arnold-press',
   'sidedelt-lateral-raises': 'lateral-raise',
+  'sidedelt-leaning-dumbbell-raise': 'lateral-raise',
   'sidedelt-cable-lateral-raise': 'cable-lateral-raise',
   'sidedelt-machine-lateral-raise': 'machine-lateral-raise',
   'reardelt-rear-fly-dumbbell': 'rear-delt-fly',
@@ -458,7 +460,7 @@ export const EXERCISE_WEIGHT_COEFFICIENTS: Record<string, WeightCoefficient> = {
   'seated-dumbbell-press': {
     baseExercise: 'bench-press',
     coefficient: 0.32,
-    note: 'Alias for dumbbell-shoulder-press',
+    note: 'Alias for dumbbell-shoulder-press, per hand',
   },
   'machine-shoulder-press': {
     baseExercise: 'bench-press',
@@ -485,12 +487,12 @@ export const EXERCISE_WEIGHT_COEFFICIENTS: Record<string, WeightCoefficient> = {
   'lateral-raise': {
     baseExercise: 'bench-press',
     coefficient: 0.12,
-    note: '~12кг при ПМ жима 100кг',
+    note: 'Per hand, ~12кг при ПМ жима 100кг',
   },
   'cable-lateral-raise': {
     baseExercise: 'bench-press',
     coefficient: 0.15,
-    note: 'Блок стабильнее гантели',
+    note: 'Per arm, блок стабильнее гантели',
   },
   'face-pull': {
     baseExercise: 'bench-press',
@@ -500,7 +502,7 @@ export const EXERCISE_WEIGHT_COEFFICIENTS: Record<string, WeightCoefficient> = {
   'rear-delt-fly': {
     baseExercise: 'bench-press',
     coefficient: 0.10,
-    note: '~10кг при ПМ жима 100',
+    note: 'Per hand, ~10кг при ПМ жима 100',
   },
   'machine-lateral-raise': {
     baseExercise: 'bench-press',
@@ -695,7 +697,8 @@ const BODYWEIGHT_ONLY_KEYWORDS = [
 
 const UNILATERAL_KEYWORDS = [
   'single', 'one-arm', 'one arm', 'one-leg', 'single-leg', 'single-arm',
-  'одной', 'одна', 'одну', 'односторон', 'поочеред', 'standing-leg-curl',
+  'per dumbbell', 'per hand', 'per arm', 'per side', 'per leg',
+  'одной', 'одна', 'одну', 'односторон', 'поочеред', 'на одну', 'для одной', 'standing-leg-curl',
 ];
 
 type ExerciseDescriptor = {
@@ -907,6 +910,8 @@ function inferLoadUnit(exerciseId: string, coefficient: WeightCoefficient, descr
   if (coefficient.isBodyweight || coefficient.coefficient === 0 || descriptor.isBodyweightOnly) return 'bodyweight';
 
   const searchable = `${exerciseId} ${descriptor.id} ${descriptor.name} ${coefficient.note ?? ''}`;
+  const lower = searchable.toLowerCase();
+  if (lower.includes('общий вес') || lower.includes('двусторонний вес')) return 'total';
   return includesAny(searchable, UNILATERAL_KEYWORDS) ? 'per_limb' : 'total';
 }
 

@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { calculatePM } from '@/lib/calculations';
+import { calculateBodyweightReps, calculateWeightFromPM, getExerciseCoefficient, getExerciseWeightLoadUnit } from '@/lib/weightConversion';
 
 export interface TrainingDay {
   id: string;
@@ -40,6 +42,37 @@ export interface TrainingDayWithExercises extends TrainingDay {
   planned_exercises: (PlannedExercise & {
     exercise_sets: ExerciseSet[];
   })[];
+}
+
+type PersonalMaxForRecalculation = {
+  exercise_id: string;
+  weight: number;
+  reps: number;
+  estimated_1rm: number | null;
+};
+
+const INTENSITY_MULTIPLIERS: Record<'easy' | 'medium' | 'hard', number> = {
+  easy: 0.675,
+  medium: 0.75,
+  hard: 0.825,
+};
+
+function findPersonalMaxForExercise(
+  exerciseId: string,
+  personalMaxes: PersonalMaxForRecalculation[]
+): PersonalMaxForRecalculation | null {
+  const direct = personalMaxes.find(pm => pm.exercise_id === exerciseId);
+  if (direct) return direct;
+
+  const baseExercise = getExerciseCoefficient(exerciseId)?.baseExercise;
+  if (!baseExercise) return null;
+
+  return personalMaxes.find(pm => pm.exercise_id === baseExercise) ?? null;
+}
+
+function shouldRecalculateForBodyweight(exerciseId: string): boolean {
+  const loadUnit = getExerciseWeightLoadUnit(exerciseId);
+  return loadUnit === 'bodyweight' || loadUnit === 'added_bodyweight' || loadUnit === 'assistance';
 }
 
 export function useTrainingDays() {
@@ -369,6 +402,101 @@ export function useTrainingDays() {
     },
   });
 
+  const recalculateFutureBodyweightLoads = useMutation({
+    mutationFn: async ({
+      bodyweight,
+      personalMaxes,
+    }: {
+      bodyweight: number;
+      personalMaxes: PersonalMaxForRecalculation[];
+    }) => {
+      if (!user) throw new Error('Not authenticated');
+
+      const today = new Date().toISOString().split('T')[0];
+      const { data: days, error } = await supabase
+        .from('training_days')
+        .select(`
+          *,
+          planned_exercises (
+            *,
+            exercise_sets (*)
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_completed', false)
+        .gte('date', today);
+
+      if (error) throw error;
+
+      const setUpdates: Promise<unknown>[] = [];
+
+      (days as TrainingDayWithExercises[] | null)?.forEach(day => {
+        day.planned_exercises.forEach(exercise => {
+          if (!shouldRecalculateForBodyweight(exercise.exercise_id)) return;
+
+          const pm = findPersonalMaxForExercise(exercise.exercise_id, personalMaxes);
+          const coefficient = getExerciseCoefficient(exercise.exercise_id);
+          const loadUnit = getExerciseWeightLoadUnit(exercise.exercise_id);
+          const intensityMultiplier = INTENSITY_MULTIPLIERS[day.intensity];
+
+          let targetWeight: number | null | undefined;
+          let targetReps: number | null = null;
+
+          if (pm && loadUnit !== 'bodyweight') {
+            targetWeight = calculateWeightFromPM(
+              exercise.exercise_id,
+              pm.estimated_1rm ?? calculatePM(pm.weight, pm.reps),
+              intensityMultiplier,
+              bodyweight,
+              pm.weight,
+              pm.reps
+            );
+          } else if (loadUnit === 'bodyweight') {
+            targetWeight = null;
+          }
+
+          if (pm && coefficient?.baseExercise === 'weighted-pull-ups') {
+            targetReps = calculateBodyweightReps(
+              exercise.exercise_id,
+              pm.weight,
+              pm.reps,
+              bodyweight,
+              day.intensity
+            );
+          }
+
+          exercise.exercise_sets.forEach(set => {
+            if (set.is_completed) return;
+
+            const updates: Partial<ExerciseSet> = {};
+            if (targetWeight !== undefined && set.target_weight !== targetWeight) {
+              updates.target_weight = targetWeight;
+            }
+            if (targetReps !== null && set.target_reps !== targetReps) {
+              updates.target_reps = targetReps;
+            }
+
+            if (Object.keys(updates).length === 0) return;
+
+            setUpdates.push(
+              supabase
+                .from('exercise_sets')
+                .update(updates)
+                .eq('id', set.id)
+            );
+          });
+        });
+      });
+
+      await Promise.all(setUpdates);
+      return setUpdates.length;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-days'] });
+      queryClient.invalidateQueries({ queryKey: ['training-day'] });
+    },
+  });
+
   // Delete only future uncompleted training days (preserves completed history)
   const deleteFutureTrainingDays = useMutation({
     mutationFn: async () => {
@@ -400,8 +528,10 @@ export function useTrainingDays() {
     updateTrainingDay: updateTrainingDay.mutateAsync,
     updatePlannedExercise: updatePlannedExercise.mutateAsync,
     updateExerciseSet: updateExerciseSet.mutateAsync,
+    recalculateFutureBodyweightLoads: recalculateFutureBodyweightLoads.mutateAsync,
     deleteFutureTrainingDays: deleteFutureTrainingDays.mutateAsync,
     isCreating: createTrainingDay.isPending,
     isBulkCreating: bulkCreateTrainingDays.isPending,
+    isRecalculatingBodyweightLoads: recalculateFutureBodyweightLoads.isPending,
   };
 }

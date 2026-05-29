@@ -60,15 +60,24 @@ const EXERCISE_PATTERN_MAP: Record<string, DetailedMovementPattern> = {
   'incline-dumbbell-fly': 'fly',
   
   // Vertical pull
+  'pull-up': 'vertical_pull',
   'pullup': 'vertical_pull',
   'pull-ups': 'vertical_pull',
+  'lats-pull-ups-medium': 'vertical_pull',
+  'lats-pull-ups-weighted': 'vertical_pull',
+  'lats-pull-ups-assisted': 'vertical_pull',
   'lat-pulldown': 'vertical_pull',
+  'lat-pulldown-medium': 'vertical_pull',
+  'lat-pulldown-wide': 'vertical_pull',
+  'lat-pulldown-weighted': 'vertical_pull',
   'assisted-pullup': 'vertical_pull',
   'assisted-dips': 'horizontal_push',
   'chin-up': 'vertical_pull',
   'chin-ups': 'vertical_pull',
   'weighted-pullup': 'vertical_pull',
   'weighted-pull-ups': 'vertical_pull',
+  'lats-straight-arm-pulldown': 'vertical_pull',
+  'lat-pulldown-straight-arm': 'vertical_pull',
   
   // Horizontal pull
   'barbell-row': 'horizontal_pull',

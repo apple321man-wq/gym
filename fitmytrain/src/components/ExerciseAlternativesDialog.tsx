@@ -9,7 +9,7 @@ import {
 } from '@/types/alternatives';
 import { ExperienceLevel, TrainingGoal, MuscleGroup, MUSCLE_GROUP_LABELS } from '@/types/training';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
-import { UNIFIED_EXERCISES, getUnifiedExerciseForId, type UnifiedExercise } from '@/data/exercisesUnified';
+import { UNIFIED_EXERCISES, getUnifiedExerciseCanonicalId, getUnifiedExerciseForId, type UnifiedExercise } from '@/data/exercisesUnified';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, Lock, Info, ChevronDown, ChevronUp, Ban, Scale, Gauge } from 'lucide-react';
 import { convertWeightBetweenExercises, getExerciseCoefficient, getExerciseWeightUnitLabel, getExerciseWeightUnitSuffix } from '@/lib/weightConversion';
@@ -98,10 +98,16 @@ type AlternativeOption = {
   similarityScore: number;
   conversionInfo: { canConvert: boolean; text: string };
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  replacementCount: number;
 };
 
 function getWeightId(exerciseId: string): string {
   return UNIFIED_WEIGHT_ID_ALIASES[exerciseId] ?? exerciseId;
+}
+
+function isSameExerciseId(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return a === b || getUnifiedExerciseCanonicalId(a) === getUnifiedExerciseCanonicalId(b);
 }
 
 function getTagSimilarityScore(tag: AlternativeTag): number {
@@ -230,6 +236,12 @@ interface ExerciseAlternativesDialogProps {
   currentPumpCount: number;
   totalExercises: number;
   intensity?: 'easy' | 'medium' | 'hard';
+  replacementHistory?: Array<{
+    modification_type: string;
+    original_exercise_id: string | null;
+    new_exercise_id: string | null;
+    created_at?: string;
+  }>;
   onReplace: (newExerciseId: string, adjustedWeight: number) => void;
 }
 
@@ -242,6 +254,7 @@ export function ExerciseAlternativesDialog({
   goal,
   currentPumpCount,
   totalExercises,
+  replacementHistory = [],
   onReplace,
 }: ExerciseAlternativesDialogProps) {
   const [expandedInfo, setExpandedInfo] = useState<string | null>(null);
@@ -250,15 +263,23 @@ export function ExerciseAlternativesDialog({
   const currentUnified = getUnifiedExerciseForId(exerciseId);
   const currentNormalized = getNormalizedExerciseById(exerciseId);
   const currentPattern = getDetailedMovementPattern(exerciseId);
-  const currentDisplayExercise: DisplayExercise | undefined = currentExercise
-    ? toExtendedDisplayExercise(currentExercise)
-    : currentUnified
-      ? toUnifiedDisplayExercise(currentUnified)
+  const currentDisplayExercise: DisplayExercise | undefined = currentUnified
+    ? toUnifiedDisplayExercise(currentUnified)
+    : currentExercise
+      ? toExtendedDisplayExercise(currentExercise)
       : undefined;
 
   const alternatives = useMemo<AlternativeOption[]>(() => {
     const options = new Map<string, AlternativeOption>();
     const sourceWeightId = getWeightId(exerciseId);
+
+    const getReplacementCount = (candidateId: string): number => (
+      replacementHistory.filter(item =>
+        item.modification_type === 'replace_exercise'
+        && isSameExerciseId(item.original_exercise_id, exerciseId)
+        && isSameExerciseId(item.new_exercise_id, candidateId)
+      ).length
+    );
 
     const addOption = (
       candidateId: string,
@@ -302,6 +323,7 @@ export function ExerciseAlternativesDialog({
         similarityScore,
         conversionInfo,
         difficulty,
+        replacementCount: getReplacementCount(candidateId),
       };
 
       if (!existing || option.similarityScore > existing.similarityScore) {
@@ -367,9 +389,10 @@ export function ExerciseAlternativesDialog({
 
     return Array.from(options.values()).sort((a, b) => {
       if (a.allowed !== b.allowed) return a.allowed ? -1 : 1;
+      if (a.replacementCount !== b.replacementCount) return b.replacementCount - a.replacementCount;
       return b.similarityScore - a.similarityScore;
     });
-  }, [currentExercise, currentUnified, currentNormalized, exerciseId, experience, goal, currentPumpCount, totalExercises, currentWeight]);
+  }, [currentExercise, currentUnified, currentNormalized, exerciseId, experience, goal, currentPumpCount, totalExercises, currentWeight, replacementHistory]);
 
   const handleSelect = (alt: AlternativeOption) => {
     if (!alt.allowed) return;
@@ -490,6 +513,11 @@ export function ExerciseAlternativesDialog({
                       <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                         {getSimilarityLabel(alt.similarityScore)} · {alt.similarityScore}%
                       </span>
+                      {alt.replacementCount > 0 && (
+                        <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500">
+                          Выбирали {alt.replacementCount}×
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs">

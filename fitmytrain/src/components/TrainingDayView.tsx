@@ -10,7 +10,7 @@ import { getExerciseById, getExercisesByMuscle } from '@/data/exercises';
 import { getExtendedExerciseById, getNormalizedExerciseById } from '@/data/exercisesExtended';
 import { getUnifiedExerciseForId } from '@/data/exercisesUnified';
 import { calculateWorkingWeight, generateFeedback, calculatePM } from '@/lib/calculations';
-import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective, getExerciseWeightUnitSuffix } from '@/lib/weightConversion';
+import { calculateWeightFromPM, getExerciseCoefficient, calculateBodyweightReps, isAssistedExercise, calculateEffectiveWeight, calculateAssistanceFromEffective, getExerciseWeightUnitLabel, getExerciseWeightUnitSuffix } from '@/lib/weightConversion';
 import { calculateAdjustedWeight, type RIRLevel, type TrainingType } from '@/lib/rirWeightAdjustment';
 import { checkPMUpdate, getPMUpdateMessage } from '@/lib/pmAutoUpdate';
 import { formatWeight, isValidWeight } from '@/lib/weightFormat';
@@ -86,6 +86,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
   const { profile } = useProfile();
   const { 
     useModificationsForDay,
+    allModifications,
     createModification,
   } = useTrainingModifications();
   
@@ -114,6 +115,13 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
   const [weightInputBuffer, setWeightInputBuffer] = useState<Record<string, string>>({});
   /** Allowed in-progress input: empty, digits, optional single dot/comma + digits. */
   const WEIGHT_INPUT_REGEX = /^\d{0,4}([.,]\d{0,2})?$/;
+
+  const moveCaretToInputEnd = (input: HTMLInputElement) => {
+    const end = input.value.length;
+    requestAnimationFrame(() => {
+      input.setSelectionRange(end, end);
+    });
+  };
 
   const personalMaxesSignature = useMemo(() => (
     personalMaxes
@@ -1159,8 +1167,8 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                 const legacyExercise = getExerciseById(pe.exerciseId);
                 
                 // Get display data from normalized DB, fallback to extended/legacy or stored name
-                const exerciseName = normExercise?.name ?? extExercise?.name ?? unifiedExercise?.name.ru ?? legacyExercise?.name ?? pe.exerciseName;
-                const muscleGroup = normExercise?.primaryMuscles?.[0] ?? extExercise?.muscleGroup ?? unifiedExercise?.primaryMuscles?.[0] ?? legacyExercise?.muscleGroup;
+                const exerciseName = unifiedExercise?.name.ru ?? normExercise?.name ?? extExercise?.name ?? legacyExercise?.name ?? pe.exerciseName;
+                const muscleGroup = unifiedExercise?.primaryMuscles?.[0] ?? normExercise?.primaryMuscles?.[0] ?? extExercise?.muscleGroup ?? legacyExercise?.muscleGroup;
                 const category = normExercise?.category ?? (legacyExercise?.type === 'compound' ? 'compound' : 'isolation');
                 const isTimeBased = normExercise?.isTimeBased ?? extExercise?.isTimeBased ?? false;
                 const isCompound = category === 'compound' || category === 'semi_compound';
@@ -1172,15 +1180,18 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                 // Skip if we can't find any info about the exercise
                 if (!exerciseName || !muscleGroup) return null;
 
-                const exerciseDescription = extExercise?.description ?? (unifiedExercise ? {
+                const exerciseDescription = unifiedExercise ? {
                   technique: unifiedExercise.instructions.keyPoints.length > 0
                     ? unifiedExercise.instructions.keyPoints
                     : [unifiedExercise.description],
                   endPoint: unifiedExercise.description,
                   focus: unifiedExercise.instructions.commonMistakes,
-                } : null);
+                } : extExercise?.description ?? null;
                 const hasDescription = Boolean(exerciseDescription);
                 const isExpanded = expandedTechnique === pe.id;
+                const weightUnitLabel = getExerciseWeightUnitLabel(pe.exerciseId);
+                const showPerLimbHint = isWeightEditable && !isTimeBased && weightUnitLabel.startsWith('на одну');
+                const showBodyweightLoad = !isWeightEditable && !isTimeBased && Boolean(profile?.weight);
 
                 return (
                   <div key={pe.id} className="exercise-card">
@@ -1194,10 +1205,15 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs text-muted-foreground">
                             {MUSCLE_GROUP_LABELS[muscleGroup]} • {isCompound ? 'База' : 'Изоляция'}
                           </span>
+                          {showPerLimbHint && (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                              Вес: {weightUnitLabel}
+                            </span>
+                          )}
                         </div>
                       </div>
                       
@@ -1367,11 +1383,15 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                                       return next;
                                     });
                                   }}
+                                  onFocus={(e) => moveCaretToInputEnd(e.currentTarget)}
                                   className={cn(
                                     'w-12 sm:w-14 h-6 sm:h-7 text-center text-xs sm:text-sm font-semibold p-0.5 sm:p-1',
                                     isOptionalWeight && 'border-dashed'
                                   )}
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveCaretToInputEnd(e.currentTarget);
+                                  }}
                                 />
 
 
@@ -1380,6 +1400,14 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
                                   {isOptionalWeight && <span className="ml-1 opacity-70">(опц.)</span>}
                                 </span>
 
+                                <span className="text-muted-foreground text-xs">×</span>
+                              </>
+                            )}
+                            {showBodyweightLoad && (
+                              <>
+                                <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                                  Вес тела: {formatWeight(profile.weight)}
+                                </span>
                                 <span className="text-muted-foreground text-xs">×</span>
                               </>
                             )}
@@ -1566,6 +1594,7 @@ export function TrainingDayView({ date, existingDay, onClose }: TrainingDayViewP
           currentPumpCount={pumpCount}
           totalExercises={exercises.length}
           intensity={intensity as 'easy' | 'medium' | 'hard'}
+          replacementHistory={allModifications}
           onReplace={(newId, weight) => handleReplaceExercise(alternativesDialogExercise.id, newId, weight)}
         />
       )}
